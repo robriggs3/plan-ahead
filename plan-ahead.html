@@ -2759,7 +2759,21 @@ function renderIdeas() {
     return;
   }
 
-  ideas.forEach(idea => list.appendChild(renderIdea(idea)));
+  // In "All" view, group: active first, then eliminated below a divider
+  if (state.ideaFilter === 'all') {
+    const active = ideas.filter(i => i.status !== 'eliminated');
+    const eliminated = ideas.filter(i => i.status === 'eliminated');
+    active.forEach(idea => list.appendChild(renderIdea(idea)));
+    if (eliminated.length > 0) {
+      const header = document.createElement('div');
+      header.style.cssText = 'font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;padding:12px 4px 4px;border-bottom:1px solid var(--border-light);margin-top:16px';
+      header.textContent = `Eliminated · ${eliminated.length}`;
+      list.appendChild(header);
+      eliminated.forEach(idea => list.appendChild(renderIdea(idea)));
+    }
+  } else {
+    ideas.forEach(idea => list.appendChild(renderIdea(idea)));
+  }
 }
 
 function renderIdea(idea) {
