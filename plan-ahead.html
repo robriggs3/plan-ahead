@@ -158,24 +158,42 @@
     padding: 20px 24px; box-shadow: var(--shadow-sm);
     display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;
   }
-  .now-card .now-block .label, .now-card .next-block .label {
+  .now-card-multi {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  }
+  .now-card-multi .now-block {
+    flex: 1; min-width: 160px; text-align: left;
+  }
+  .now-card-multi .now-block.emphasis .place { color: var(--accent); }
+  .now-card-multi .now-block.emphasis .label { color: var(--accent); font-weight: 600; }
+  .now-card-multi .arrow {
+    flex: 0 0 auto;
+  }
+  .now-card .now-block .label, .now-card .next-block .label, .now-card-multi .now-block .label {
     font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
     text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
   }
-  .now-card .now-block .place, .now-card .next-block .place {
+  .now-card .now-block .place, .now-card .next-block .place, .now-card-multi .now-block .place {
     font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; line-height: 1.2;
   }
-  .now-card .now-block .dates, .now-card .next-block .dates {
+  .now-card-multi .now-block .place { font-size: 18px; }
+  .now-card-multi .now-block.emphasis .place { font-size: 22px; }
+  .now-card .now-block .dates, .now-card .next-block .dates, .now-card-multi .now-block .dates {
     margin-top: 4px; font-size: 13px; color: var(--text-2);
   }
   .now-card .arrow {
     font-family: 'Fraunces', Georgia, serif; font-size: 28px; color: var(--accent); font-style: italic;
   }
+  .now-card-multi .arrow {
+    font-family: 'Fraunces', Georgia, serif; font-size: 24px; color: var(--accent); font-style: italic;
+  }
   .now-card .next-block { text-align: right; }
   @media (max-width: 720px) {
     .now-card { grid-template-columns: 1fr; gap: 12px; }
-    .now-card .arrow { transform: rotate(90deg); }
+    .now-card .arrow, .now-card-multi .arrow { transform: rotate(90deg); }
     .now-card .next-block { text-align: left; }
+    .now-card-multi { flex-direction: column; align-items: stretch; }
+    .now-card-multi .now-block { text-align: left; }
   }
   .now-empty {
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
@@ -582,6 +600,7 @@
   }
   .city.past { opacity: 0.85; }
   .city.past .city-name { color: var(--text-2); }
+  .past-flat-list { display: flex; flex-direction: column; gap: 12px; }
   @media (max-width: 720px) {
     .past-list { padding: 4px 8px 8px 16px; margin: 0 4px 8px 12px; }
   }
@@ -908,6 +927,9 @@
       <div class="meta" id="itinerary-meta">—</div>
     </div>
 
+    <div class="filter-pills" id="status-filters" style="margin-bottom:8px"></div>
+    <div id="status-cost-row" style="display:flex;gap:18px;flex-wrap:wrap;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:14px"></div>
+
     <div id="view-list-wrap">
       <div class="add-city-row">
         <input class="text-input" id="add-city-name" placeholder="City (e.g. Sarandë)">
@@ -952,6 +974,16 @@
 
     <div class="filter-pills" id="idea-filters"></div>
     <div class="idea-list" id="idea-list"></div>
+  </section>
+
+  <!-- PAST TRAVEL -->
+  <section class="section" id="past-travel-section" style="display:none">
+    <div class="section-head">
+      <h2>Past travel</h2>
+      <div class="meta" id="past-meta">—</div>
+    </div>
+    <div class="muted" style="margin-bottom:10px">Completed stays. Still counted in day totals (Schengen, FEIE, country).</div>
+    <div class="past-flat-list" id="past-list-flat"></div>
   </section>
 
   <!-- TRAVEL PROFILE -->
@@ -1334,6 +1366,7 @@ function defaultState() {
     aiMode: 'copy',
     apiKey: '',
     ideaFilter: 'all',
+    statusFilter: 'all',
     pastOpen: false,
     mapFilter: 'all',
     mapFrom: '',
@@ -1717,69 +1750,78 @@ function renderNow() {
   const meta = document.getElementById('now-meta');
   const todayStr = todayISO();
   const cities = sortedCities();
-  let current = null, next = null;
+
+  let current = null;
+  const future = []; // upcoming, sorted by checkIn
   for (const c of cities) {
     if (!c.checkIn || !c.checkOut) continue;
     if (c.checkIn <= todayStr && c.checkOut > todayStr) {
       current = c;
     } else if (c.checkIn > todayStr) {
-      if (!next || c.checkIn < next.checkIn) next = c;
+      future.push(c);
     }
   }
-  if (!current && !next) {
+  future.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
+
+  if (!current && future.length === 0) {
     container.innerHTML = '<div class="now-empty">Nothing planned yet. Add a city below to start.</div>';
     meta.textContent = '—';
-  } else if (current && next) {
-    const daysUntilLeaving = Math.round((parseDate(current.checkOut) - parseDate(todayStr)) / 86400000);
-    container.innerHTML = `
-      <div class="now-card">
-        <div class="now-block">
-          <div class="label">Now</div>
-          <div class="place">${escapeHTML(current.name)}, ${escapeHTML(current.country||'—')}</div>
-          <div class="dates">${fmtDate(current.checkIn)} → ${fmtDate(current.checkOut)} · ${daysUntilLeaving} day${daysUntilLeaving===1?'':'s'} left</div>
+  } else {
+    // Build a flow of up to 3 cards: current + up to 2 next OR up to 3 future
+    const cards = [];
+    if (current) {
+      const daysUntilLeaving = Math.round((parseDate(current.checkOut) - parseDate(todayStr)) / 86400000);
+      cards.push({
+        label: 'NOW',
+        name: current.name,
+        country: current.country || '—',
+        dates: `${fmtDate(current.checkIn)} → ${fmtDate(current.checkOut)}`,
+        sub: `${daysUntilLeaving} day${daysUntilLeaving===1?'':'s'} left`,
+        emphasis: true
+      });
+      future.slice(0, 2).forEach((c, idx) => {
+        cards.push({
+          label: idx === 0 ? 'NEXT' : 'AFTER',
+          name: c.name,
+          country: c.country || '—',
+          dates: `${fmtDate(c.checkIn)} → ${fmtDate(c.checkOut)}`,
+          sub: ''
+        });
+      });
+      meta.textContent = `${daysUntilLeaving}d until move`;
+    } else {
+      // No current city — show next 3 upcoming
+      future.slice(0, 3).forEach((c, idx) => {
+        const daysUntil = Math.round((parseDate(c.checkIn) - parseDate(todayStr)) / 86400000);
+        cards.push({
+          label: idx === 0 ? 'NEXT' : (idx === 1 ? 'THEN' : 'AFTER'),
+          name: c.name,
+          country: c.country || '—',
+          dates: `${fmtDate(c.checkIn)} → ${fmtDate(c.checkOut)}`,
+          sub: idx === 0 ? `in ${daysUntil} day${daysUntil===1?'':'s'}` : ''
+        });
+      });
+      if (future.length > 0) {
+        const daysUntil = Math.round((parseDate(future[0].checkIn) - parseDate(todayStr)) / 86400000);
+        meta.textContent = `${daysUntil}d until ${future[0].name}`;
+      } else {
+        meta.textContent = '—';
+      }
+    }
+
+    // Render
+    const blocks = cards.map((card, idx) => {
+      const arrow = idx < cards.length - 1 ? '<div class="arrow">→</div>' : '';
+      return `
+        <div class="now-block${card.emphasis ? ' emphasis' : ''}">
+          <div class="label">${card.label}</div>
+          <div class="place">${escapeHTML(card.name)}, ${escapeHTML(card.country)}</div>
+          <div class="dates">${card.dates}${card.sub ? ' · ' + card.sub : ''}</div>
         </div>
-        <div class="arrow">→</div>
-        <div class="next-block">
-          <div class="label">Next</div>
-          <div class="place">${escapeHTML(next.name)}, ${escapeHTML(next.country||'—')}</div>
-          <div class="dates">${fmtDate(next.checkIn)} → ${fmtDate(next.checkOut)}</div>
-        </div>
-      </div>`;
-    meta.textContent = `${daysUntilLeaving}d until move`;
-  } else if (current) {
-    const daysUntilLeaving = Math.round((parseDate(current.checkOut) - parseDate(todayStr)) / 86400000);
-    container.innerHTML = `
-      <div class="now-card">
-        <div class="now-block">
-          <div class="label">Now</div>
-          <div class="place">${escapeHTML(current.name)}, ${escapeHTML(current.country||'—')}</div>
-          <div class="dates">${fmtDate(current.checkIn)} → ${fmtDate(current.checkOut)} · ${daysUntilLeaving} day${daysUntilLeaving===1?'':'s'} left</div>
-        </div>
-        <div class="arrow">→</div>
-        <div class="next-block">
-          <div class="label">Next</div>
-          <div class="place" style="color:var(--text-3);font-style:italic">Nothing planned</div>
-          <div class="dates">&nbsp;</div>
-        </div>
-      </div>`;
-    meta.textContent = 'no next leg';
-  } else if (next) {
-    const daysUntil = Math.round((parseDate(next.checkIn) - parseDate(todayStr)) / 86400000);
-    container.innerHTML = `
-      <div class="now-card">
-        <div class="now-block">
-          <div class="label">Currently</div>
-          <div class="place" style="color:var(--text-3);font-style:italic">Between stays</div>
-          <div class="dates">&nbsp;</div>
-        </div>
-        <div class="arrow">→</div>
-        <div class="next-block">
-          <div class="label">Next up</div>
-          <div class="place">${escapeHTML(next.name)}, ${escapeHTML(next.country||'—')}</div>
-          <div class="dates">${fmtDate(next.checkIn)} · in ${daysUntil} day${daysUntil===1?'':'s'}</div>
-        </div>
-      </div>`;
-    meta.textContent = `${daysUntil}d until ${next.name}`;
+        ${arrow}
+      `;
+    }).join('');
+    container.innerHTML = `<div class="now-card now-card-multi">${blocks}</div>`;
   }
 
   // Issues
@@ -1841,15 +1883,17 @@ function renderCounters() {
   `;
   container.appendChild(schCard);
 
-  // Total cost (respecting filter)
+  // Total cost (respecting filter) — use max of estimate vs booked accommodations per city
   let totalCost = 0;
   inScopeCities.forEach(c => {
-    if (c.estimatedCost) totalCost += Number(c.estimatedCost) || 0;
+    const estCost = Number(c.estimatedCost) || 0;
+    let bookedCost = 0;
     if (c.accommodations) {
       c.accommodations.forEach(a => {
-        if (a.cost && (a.status === 'booked' || !a.status)) totalCost += Number(a.cost) || 0;
+        if (a.cost && a.status === 'booked') bookedCost += Number(a.cost) || 0;
       });
     }
+    totalCost += Math.max(estCost, bookedCost);
   });
   // Compute span in months from earliest checkIn to latest checkOut among in-scope cities
   let spanMonths = 0;
@@ -1936,6 +1980,9 @@ function renderCities() {
   const cities = sortedCities();
   meta.textContent = cities.length + ' cit' + (cities.length === 1 ? 'y' : 'ies');
 
+  renderStatusFilters();
+  renderStatusCostRow();
+
   if (cities.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'now-empty';
@@ -1948,72 +1995,151 @@ function renderCities() {
   const issueCityIds = new Set(issues.flatMap(i => i.cityIds));
   const alertCityIds = new Set(issues.filter(i => i.severity === 'alert').flatMap(i => i.cityIds));
   const todayStr = todayISO();
+  const activeFilter = state.statusFilter || 'all';
 
-  // Split into past / current+future
+  // Categorize: past vs active, by status
   const past = [];
-  const active = [];
+  const byStatus = { booked: [], shortlisted: [], tentative: [] };
   cities.forEach(c => {
-    if (c.checkOut && c.checkOut < todayStr) past.push(c);
-    else active.push(c);
+    if (c.checkOut && c.checkOut < todayStr) { past.push(c); return; }
+    const s = c.status || 'tentative';
+    if (s === 'booked') byStatus.booked.push(c);
+    else if (s === 'shortlisted') byStatus.shortlisted.push(c);
+    else byStatus.tentative.push(c);
   });
 
-  // Active list — use custom sortIndex if any city has it, otherwise keep date order
-  const hasCustomOrder = active.some(c => typeof c.sortIndex === 'number');
-  if (hasCustomOrder) {
-    active.sort((a, b) => {
-      const ai = typeof a.sortIndex === 'number' ? a.sortIndex : 9999;
-      const bi = typeof b.sortIndex === 'number' ? b.sortIndex : 9999;
-      if (ai !== bi) return ai - bi;
-      return (a.checkIn || '9999').localeCompare(b.checkIn || '9999');
-    });
-  }
+  // Apply custom sort within each group if any city has sortIndex
+  Object.values(byStatus).forEach(arr => {
+    const hasCustom = arr.some(c => typeof c.sortIndex === 'number');
+    if (hasCustom) {
+      arr.sort((a, b) => {
+        const ai = typeof a.sortIndex === 'number' ? a.sortIndex : 9999;
+        const bi = typeof b.sortIndex === 'number' ? b.sortIndex : 9999;
+        if (ai !== bi) return ai - bi;
+        return (a.checkIn || '9999').localeCompare(b.checkIn || '9999');
+      });
+    }
+  });
 
-  // Show "reset sort" hint if custom order applied
-  if (hasCustomOrder) {
+  const anyCustom = state.cities.some(c => typeof c.sortIndex === 'number');
+  if (anyCustom) {
     const hint = document.createElement('div');
     hint.style.cssText = 'font-size:11px;color:var(--text-3);font-family:\'JetBrains Mono\',monospace;text-align:right;margin-bottom:4px';
     hint.innerHTML = `Custom order · <a href="#" onclick="event.preventDefault();resetCustomSort()" style="color:var(--accent);text-decoration:none">Reset to chronological</a>`;
     container.appendChild(hint);
   }
 
-  active.forEach(city => container.appendChild(
-    renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), false)
-  ));
+  // Render based on active filter
+  const renderGroup = (cities, label) => {
+    if (cities.length === 0) return;
+    if (activeFilter === 'all' && label) {
+      const header = document.createElement('div');
+      header.style.cssText = 'font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;padding:8px 4px 4px;border-bottom:1px solid var(--border-light);margin-top:16px';
+      header.textContent = label + ' · ' + cities.length;
+      container.appendChild(header);
+    }
+    cities.forEach(city => container.appendChild(
+      renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), false)
+    ));
+  };
 
-  // Render past section, collapsed by default
-  if (past.length > 0) {
-    const pastSection = document.createElement('div');
-    pastSection.className = 'past-section' + (state.pastOpen ? ' open' : '');
-
-    const toggle = document.createElement('div');
-    toggle.className = 'past-toggle';
-    const nights = past.reduce((sum, c) => sum + cityNights(c), 0);
-    toggle.innerHTML = `
-      <div>
-        <h3>Past travel</h3>
-        <div class="meta">Still counted in day totals</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        <div class="meta">${past.length} cit${past.length===1?'y':'ies'} · ${nights} nights</div>
-        <span class="chev">▶</span>
-      </div>
-    `;
-    toggle.onclick = () => {
-      state.pastOpen = !state.pastOpen;
-      saveState();
-      renderCities();
-    };
-    pastSection.appendChild(toggle);
-
-    const list = document.createElement('div');
-    list.className = 'past-list';
-    past.reverse().forEach(city => list.appendChild(
+  if (activeFilter === 'all') {
+    renderGroup(byStatus.booked, 'Booked');
+    renderGroup(byStatus.shortlisted, 'Shortlisted');
+    renderGroup(byStatus.tentative, 'Tentative');
+  } else if (activeFilter === 'booked') renderGroup(byStatus.booked);
+  else if (activeFilter === 'shortlisted') renderGroup(byStatus.shortlisted);
+  else if (activeFilter === 'tentative') renderGroup(byStatus.tentative);
+  else if (activeFilter === 'past') {
+    // Render past as a flat list when filter active
+    past.forEach(city => container.appendChild(
       renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), true)
     ));
-    pastSection.appendChild(list);
-
-    container.appendChild(pastSection);
   }
+  // Past travel now renders in its own dedicated section below Ideas (renderPastTravel)
+}
+
+function renderPastTravel() {
+  const section = document.getElementById('past-travel-section');
+  const list = document.getElementById('past-list-flat');
+  const meta = document.getElementById('past-meta');
+  if (!section || !list) return;
+  const todayStr = todayISO();
+  const past = state.cities.filter(c => c.checkOut && c.checkOut < todayStr);
+  // Hide entire section if no past travel
+  if (past.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  section.style.display = '';
+  // Sort by check-in date, most recent first
+  past.sort((a, b) => (b.checkIn || '').localeCompare(a.checkIn || ''));
+  const nights = past.reduce((sum, c) => sum + cityNights(c), 0);
+  meta.textContent = `${past.length} cit${past.length===1?'y':'ies'} · ${nights} nights`;
+
+  const issues = detectIssues();
+  const issueCityIds = new Set(issues.flatMap(i => i.cityIds));
+  const alertCityIds = new Set(issues.filter(i => i.severity === 'alert').flatMap(i => i.cityIds));
+
+  list.innerHTML = '';
+  past.forEach(city => list.appendChild(
+    renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), true)
+  ));
+}
+
+// Build the status filter pills row
+function renderStatusFilters() {
+  const container = document.getElementById('status-filters');
+  if (!container) return;
+  const todayStr = todayISO();
+  const counts = { all: 0, booked: 0, shortlisted: 0, tentative: 0, past: 0 };
+  state.cities.forEach(c => {
+    counts.all++;
+    if (c.checkOut && c.checkOut < todayStr) { counts.past++; return; }
+    const s = c.status || 'tentative';
+    if (s === 'booked') counts.booked++;
+    else if (s === 'shortlisted') counts.shortlisted++;
+    else counts.tentative++;
+  });
+  const filters = [
+    { key: 'all', label: 'All' },
+    { key: 'booked', label: 'Booked' },
+    { key: 'shortlisted', label: 'Shortlisted' },
+    { key: 'tentative', label: 'Tentative' },
+    { key: 'past', label: 'Past' }
+  ];
+  container.innerHTML = '';
+  filters.forEach(f => {
+    const pill = document.createElement('button');
+    pill.className = 'filter-pill' + ((state.statusFilter || 'all') === f.key ? ' active' : '');
+    pill.textContent = `${f.label} (${counts[f.key]})`;
+    pill.onclick = () => { state.statusFilter = f.key; saveState(); renderAll(); };
+    container.appendChild(pill);
+  });
+}
+
+// Show cost totals broken down by status
+function renderStatusCostRow() {
+  const container = document.getElementById('status-cost-row');
+  if (!container) return;
+  const todayStr = todayISO();
+  const costs = { booked: 0, shortlisted: 0, tentative: 0 };
+  state.cities.forEach(c => {
+    if (c.checkOut && c.checkOut < todayStr) return; // past doesn't count
+    const estCost = Number(c.estimatedCost) || 0;
+    let bookedCost = 0;
+    (c.accommodations||[]).forEach(a => { if (a.cost && a.status === 'booked') bookedCost += Number(a.cost) || 0; });
+    const cityCost = Math.max(estCost, bookedCost);
+    const s = c.status || 'tentative';
+    if (s === 'booked') costs.booked += cityCost;
+    else if (s === 'shortlisted') costs.shortlisted += cityCost;
+    else costs.tentative += cityCost;
+  });
+  const parts = [];
+  parts.push(`<span style="color:var(--green)">Booked: <strong>${fmtCurrency(Math.round(costs.booked),'USD')}</strong></span>`);
+  if (costs.shortlisted > 0) parts.push(`<span style="color:var(--blue)">Shortlisted: <strong>${fmtCurrency(Math.round(costs.shortlisted),'USD')}</strong></span>`);
+  parts.push(`<span style="color:var(--amber)">Tentative: <strong>${fmtCurrency(Math.round(costs.tentative),'USD')}</strong></span>`);
+  container.innerHTML = parts.join('');
 }
 
 // ==================== LIST DRAG-DROP ====================
@@ -2136,9 +2262,11 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
   const nights = cityNights(city);
   const accomCount = (city.accommodations || []).length;
   const accomBooked = (city.accommodations || []).filter(a => a.status === 'booked').length;
-  let cityCost = 0;
-  if (city.estimatedCost) cityCost += Number(city.estimatedCost) || 0;
-  (city.accommodations||[]).forEach(a => { if (a.cost && (a.status === 'booked' || !a.status)) cityCost += Number(a.cost) || 0; });
+  // Compute city cost as max of estimate vs booked accommodations (avoid double-count)
+  const estCost = Number(city.estimatedCost) || 0;
+  let bookedCost = 0;
+  (city.accommodations||[]).forEach(a => { if (a.cost && a.status === 'booked') bookedCost += Number(a.cost) || 0; });
+  const cityCost = Math.max(estCost, bookedCost);
 
   // Score badge
   const composite = city.scores ? computeComposite(city.scores) : null;
@@ -2190,7 +2318,7 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
   body.appendChild(buildAccommodations(city));
   body.appendChild(buildCitySubsections(city));
 
-  // Delete + Duplicate buttons
+  // Delete + Duplicate + Demote buttons
   const footer = document.createElement('div');
   footer.style.marginTop = '20px';
   footer.style.paddingTop = '12px';
@@ -2198,7 +2326,7 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
   footer.style.display = 'flex';
   footer.style.gap = '8px';
   footer.style.flexWrap = 'wrap';
-  footer.innerHTML = '<button class="btn-secondary" onclick="duplicateCity(\''+capturedId+'\')" title="Create a fresh copy with new dates — useful for home base or return stays">⧉ Duplicate</button><button class="btn-secondary danger" onclick="deleteCity(\''+capturedId+'\')">Delete this city</button>';
+  footer.innerHTML = '<button class="btn-secondary" onclick="duplicateCity(\''+capturedId+'\')" title="Create a fresh copy with new dates — useful for home base or return stays">⧉ Duplicate</button><button class="btn-secondary" onclick="demoteCity(\''+capturedId+'\')" title="Move back to Ideas (loses per-city detail but keeps notes)">↩ Demote to Ideas</button><button class="btn-secondary danger" onclick="deleteCity(\''+capturedId+'\')">Delete this city</button>';
   body.appendChild(footer);
 
   node.appendChild(body);
@@ -2851,6 +2979,7 @@ function applyImportedJSON(text, source) {
     state = Object.assign(defaultState(), parsed);
     openCityIds = new Set();
     const backfilled = backfillCoordinates();
+    const promoted = backfillCityStatusFromAccommodations();
     // Auto-score all cities (objective only) after import
     state.cities.forEach(c => autoScoreCity(c.id));
     saveState();
@@ -3419,6 +3548,34 @@ function duplicateCity(id) {
   toast('Duplicated ' + original.name + ' — set new dates in the expanded card.', 'ok');
 }
 
+function demoteCity(id) {
+  const c = state.cities.find(c => c.id === id);
+  if (!c) return;
+  // Build a richer note that preserves what was here
+  const detailSummary = [];
+  if ((c.accommodations||[]).length) detailSummary.push((c.accommodations.length) + ' property note' + (c.accommodations.length===1?'':'s'));
+  if ((c.neighborhoods||[]).length) detailSummary.push((c.neighborhoods.length) + ' nbhd');
+  if ((c.attractions||[]).length) detailSummary.push((c.attractions.length) + ' attr');
+  if ((c.restaurants||[]).length) detailSummary.push((c.restaurants.length) + ' rest');
+  const lost = detailSummary.length ? ` (lost detail: ${detailSummary.join(', ')})` : '';
+
+  if (armConfirm('demoteCity:' + id, `Click Demote again to move ${c.name} back to Ideas${lost}. Notes preserved; per-city detail (accommodations, neighborhoods, etc.) will be discarded.`)) return;
+
+  const idea = {
+    id: newId(),
+    name: c.name,
+    country: c.country || '',
+    status: 'considering',
+    notes: c.notes || ''
+  };
+  state.ideas.unshift(idea);
+  state.cities = state.cities.filter(x => x.id !== id);
+  openCityIds.delete(id);
+  saveState();
+  renderAll();
+  toast(`✓ Demoted ${c.name} to Ideas.`, 'ok');
+}
+
 function addAccommodation(cityId) {
   const c = state.cities.find(c => c.id === cityId);
   if (!c) return;
@@ -3437,7 +3594,24 @@ function updateAccom(cityId, accId, key, value) {
   if (!c || !c.accommodations) return;
   const a = c.accommodations.find(a => a.id === accId);
   if (!a) return;
+  const oldValue = a[key];
   a[key] = value;
+
+  // Auto-sync city status from accommodation status:
+  // If any accommodation just became "booked" and city isn't already "booked", promote.
+  if (key === 'status' && value === 'booked' && oldValue !== 'booked') {
+    if (c.status !== 'booked') {
+      const oldCityStatus = c.status || 'tentative';
+      c.status = 'booked';
+      saveState();
+      renderNow();
+      renderCounters();
+      renderCities();
+      toast(`Auto-promoted ${c.name} to Booked (because a property is booked). Was ${oldCityStatus}.`, 'ok');
+      return;
+    }
+  }
+
   saveState();
   renderNow();
   renderCounters();
@@ -3507,20 +3681,35 @@ function removeIdea(id) {
 function promoteIdea(id) {
   const idea = state.ideas.find(i => i.id === id);
   if (!idea) return;
+  const coords = lookupCity(idea.name, idea.country);
   const city = {
     id: newId(), name: idea.name, country: idea.country || '',
     checkIn: '', checkOut: '', state: '', status: 'tentative',
     notes: idea.notes || '', estimatedCost: '',
+    lat: coords ? coords.lat : '', lng: coords ? coords.lng : '',
     accommodations: [],
     neighborhoods: [], attractions: [], restaurants: [], dayTrips: [], coworking: [], friends: []
   };
   state.cities.push(city);
   state.ideas = state.ideas.filter(i => i.id !== id);
   openCityIds.add(city.id);
+  autoScoreCity(city.id);
+  // If status filter is hiding tentative, switch to All so user sees the promoted city
+  if (state.statusFilter && state.statusFilter !== 'all' && state.statusFilter !== 'tentative') {
+    state.statusFilter = 'all';
+  }
   saveState();
   renderAll();
-  // Scroll to itinerary
-  document.querySelector('.section-head h2 + .meta')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast(`✓ Promoted "${city.name}" to Itinerary (tentative). Set dates to schedule.`, 'ok');
+  // Scroll to the new card after render
+  setTimeout(() => {
+    document.querySelectorAll('#city-list .city').forEach(card => {
+      const titleEl = card.querySelector('.city-name');
+      if (titleEl && titleEl.textContent === city.name) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }, 150);
 }
 
 // ==================== AI PROMPT ====================
@@ -3789,6 +3978,21 @@ function backfillCoordinates() {
         c.lng = hit.lng;
         count++;
       }
+    }
+  });
+  return count;
+}
+
+// Sync city status from accommodation status: if any accommodation is booked
+// but city isn't, promote city to booked. Runs on load / import.
+function backfillCityStatusFromAccommodations() {
+  let count = 0;
+  state.cities.forEach(c => {
+    if (c.status === 'booked') return;
+    const hasBookedAccom = (c.accommodations || []).some(a => a.status === 'booked');
+    if (hasBookedAccom) {
+      c.status = 'booked';
+      count++;
     }
   });
   return count;
@@ -4630,11 +4834,22 @@ function renderBoard() {
   if (!board) return;
   const granularity = state.boardGranularity || 'quarter';
   const todayStr = todayISO();
+  const statusFilter = state.statusFilter || 'all';
+
+  // Filter cities by status filter
+  const filtered = state.cities.filter(c => {
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'past') return c.checkOut && c.checkOut < todayStr;
+    // For non-past status filters, exclude past cities
+    if (c.checkOut && c.checkOut < todayStr) return false;
+    const s = c.status || 'tentative';
+    return s === statusFilter;
+  });
 
   // Group cities by bucket
   const groups = {};
   const backlog = [];
-  state.cities.forEach(city => {
+  filtered.forEach(city => {
     const buckets = cityBuckets(city, granularity);
     if (buckets[0] === 'backlog') {
       backlog.push(city);
@@ -5077,12 +5292,19 @@ function renderAll() {
   if (state.view === 'board') renderBoard();
   applyView();
   renderIdeas();
+  renderPastTravel();
   renderProfile();
   renderSettings();
   renderMap();
 }
 
 // ==================== INIT ====================
+
+// Backfill: sync any cities whose accommodations are booked but status isn't
+const promotedCount = backfillCityStatusFromAccommodations();
+if (promotedCount > 0) {
+  saveState();
+}
 
 populateCountries();
 setupProfile();
