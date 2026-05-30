@@ -328,14 +328,24 @@
   }
   .accom-name {
     font-weight: 500; outline: none; padding: 2px 4px; border-radius: 3px; font-size: 14px;
+    min-width: 60px;
   }
   .accom-name:focus { background: var(--accent-soft); }
+  .accom-name:empty:before {
+    content: attr(data-placeholder);
+    color: var(--text-3); font-style: italic; font-weight: 400;
+  }
   .accom-link {
     font-size: 12px; color: var(--blue); text-decoration: none; padding: 2px 4px;
     border-radius: 3px; outline: none;
+    min-width: 60px; display: inline-block;
   }
   .accom-link:focus { background: var(--accent-soft); }
   .accom-link:hover { text-decoration: underline; }
+  .accom-link:empty:before {
+    content: attr(data-placeholder);
+    color: var(--text-3); font-style: italic;
+  }
   .accom-row2 {
     display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 8px;
   }
@@ -728,11 +738,42 @@
     background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;
     padding: 10px 12px; margin-bottom: 8px;
     cursor: pointer; transition: all 0.15s;
+    position: relative;
   }
   .board-card:hover { box-shadow: var(--shadow); border-color: var(--accent); }
   .board-card.past { opacity: 0.7; }
   .board-card.has-issue { border-left: 3px solid var(--amber); }
   .board-card.has-alert { border-left: 3px solid var(--red); }
+
+  .board-card-actions {
+    position: absolute; top: 6px; right: 6px;
+    display: none; gap: 3px;
+  }
+  .board-card:hover .board-card-actions { display: flex; }
+  .board-card-actions button {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 6px;
+    font-size: 11px; line-height: 1.2; cursor: pointer; color: var(--text-3);
+    transition: all 0.15s;
+  }
+  .board-card-actions button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+  .board-card-actions button.delete:hover { color: var(--red); border-color: var(--red); background: var(--red-soft); }
+
+  /* DRAG STATES */
+  .board-card.dragging { opacity: 0.4; cursor: grabbing; }
+  .board-card { cursor: grab; }
+  .board-card:active { cursor: grabbing; }
+  .board-column.drag-over {
+    background: var(--accent-soft);
+    outline: 2px dashed var(--accent); outline-offset: -4px;
+  }
+  .drag-handle {
+    color: var(--text-3); cursor: grab; padding: 0 6px;
+    font-size: 14px; user-select: none;
+  }
+  .drag-handle:hover { color: var(--accent); }
+  .accom-item.dragging { opacity: 0.4; }
+  .accom-item.drop-target { border-top: 3px solid var(--accent); }
   .board-card .name {
     font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 14px;
     margin-bottom: 4px;
@@ -1807,8 +1848,8 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
   const composite = city.scores ? computeComposite(city.scores) : null;
   const scoreCls = scoreColorClass(composite);
   const scoreBadge = composite != null
-    ? `<span class="score-badge ${scoreCls}" onclick="event.stopPropagation();openScoreModal('${capturedId}')" title="Click for breakdown">★ ${composite}%</span>`
-    : `<span class="score-badge gray" onclick="event.stopPropagation();openScoreModal('${capturedId}')" title="Click to score">Score —</span>`;
+    ? `<span class="score-badge ${scoreCls}" onclick="event.stopPropagation();openScoreModal('${capturedId}')" title="Click for full breakdown">★ ${composite}%</span>`
+    : `<span class="score-badge gray" onclick="event.stopPropagation();openScoreModal('${capturedId}')" title="Click to score this destination">★ Score</span>`;
 
   // Header
   const header = document.createElement('div');
@@ -1848,12 +1889,15 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
   body.appendChild(buildAccommodations(city));
   body.appendChild(buildCitySubsections(city));
 
-  // Delete button
+  // Delete + Duplicate buttons
   const footer = document.createElement('div');
   footer.style.marginTop = '20px';
   footer.style.paddingTop = '12px';
   footer.style.borderTop = '1px solid var(--border-light)';
-  footer.innerHTML = '<button class="btn-secondary danger" onclick="deleteCity(\''+capturedId+'\')">Delete this city</button>';
+  footer.style.display = 'flex';
+  footer.style.gap = '8px';
+  footer.style.flexWrap = 'wrap';
+  footer.innerHTML = '<button class="btn-secondary" onclick="duplicateCity(\''+capturedId+'\')" title="Create a fresh copy with new dates — useful for home base or return stays">⧉ Duplicate</button><button class="btn-secondary danger" onclick="deleteCity(\''+capturedId+'\')">Delete this city</button>';
   body.appendChild(footer);
 
   node.appendChild(body);
@@ -2477,6 +2521,8 @@ function applyImportedJSON(text, source) {
     state = Object.assign(defaultState(), parsed);
     openCityIds = new Set();
     const backfilled = backfillCoordinates();
+    // Auto-score all cities (objective only) after import
+    state.cities.forEach(c => autoScoreCity(c.id));
     saveState();
     renderAll();
     const cityCount = (state.cities || []).length;
@@ -2544,6 +2590,7 @@ User's notes follow below. Extract everything you can find:
 `;
 
 let _notesExtracted = null;
+let _notesActions = {}; // 'city:0' | 'idea:1' → 'skip' | 'replace' | 'add'
 
 function openNotesImport() {
   document.getElementById('notes-input').value = '';
@@ -2663,54 +2710,149 @@ function previewNotesImport() {
     return;
   }
   _notesExtracted = { cities, ideas };
+  _notesActions = {};
+
+  const existingCityNames = new Set((state.cities||[]).map(c => (c.name||'').toLowerCase()));
+  const existingIdeaNames = new Set((state.ideas||[]).map(i => (i.name||'').toLowerCase()));
+
+  // Initialize default actions
+  cities.forEach((c, idx) => {
+    const isDupe = existingCityNames.has((c.name||'').toLowerCase());
+    _notesActions['city:' + idx] = isDupe ? 'skip' : 'add';
+  });
+  ideas.forEach((i, idx) => {
+    const isDupe = existingIdeaNames.has((i.name||'').toLowerCase());
+    _notesActions['idea:' + idx] = isDupe ? 'skip' : 'add';
+  });
 
   // Build preview
   const previewEl = document.getElementById('notes-preview-content');
   let html = '';
+
+  const dupeCount = Object.values(_notesActions).filter((v,i) => v === 'skip').length;
+  if (dupeCount > 0) {
+    html += `<div style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--amber)">
+      <strong>${dupeCount} duplicate${dupeCount===1?'':'s'} detected.</strong> Choose action per item below.
+    </div>`;
+  }
+
   if (cities.length > 0) {
-    html += `<div style="margin-bottom:10px"><strong style="font-family:'Fraunces',Georgia,serif">${cities.length} cit${cities.length===1?'y':'ies'} to add</strong></div>`;
-    html += '<ul style="margin:0 0 12px 18px;padding:0">';
-    cities.forEach(c => {
+    html += `<div style="margin-bottom:8px"><strong style="font-family:'Fraunces',Georgia,serif">${cities.length} cit${cities.length===1?'y':'ies'} from notes</strong></div>`;
+    html += '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">';
+    cities.forEach((c, idx) => {
+      const key = 'city:' + idx;
+      const isDupe = existingCityNames.has((c.name||'').toLowerCase());
       const subs = [];
       if ((c.accommodations||[]).length) subs.push(c.accommodations.length + ' accom');
-      if ((c.neighborhoods||[]).length) subs.push(c.neighborhoods.length + ' neighborhoods');
-      if ((c.attractions||[]).length) subs.push(c.attractions.length + ' attractions');
-      if ((c.restaurants||[]).length) subs.push(c.restaurants.length + ' restaurants');
-      if ((c.coworking||[]).length) subs.push(c.coworking.length + ' coworking');
-      if ((c.dayTrips||[]).length) subs.push(c.dayTrips.length + ' day trips');
+      if ((c.neighborhoods||[]).length) subs.push(c.neighborhoods.length + ' nb');
+      if ((c.attractions||[]).length) subs.push(c.attractions.length + ' attr');
+      if ((c.restaurants||[]).length) subs.push(c.restaurants.length + ' rest');
+      if ((c.coworking||[]).length) subs.push(c.coworking.length + ' cowk');
       const dates = (c.checkIn || c.checkOut) ? ` · ${c.checkIn||'?'} → ${c.checkOut||'?'}` : '';
-      const subText = subs.length ? ` <span style="color:var(--text-3);font-size:11px">(${subs.join(', ')})</span>` : '';
-      html += `<li style="margin-bottom:4px"><strong>${escapeHTML(c.name)}</strong>, ${escapeHTML(c.country||'?')}${escapeHTML(dates)}${subText}</li>`;
+      const subText = subs.length ? `<span style="color:var(--text-3);font-size:10px;font-family:'JetBrains Mono',monospace"> (${subs.join(', ')})</span>` : '';
+
+      html += `<div style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;padding:8px 12px">
+        <div style="font-size:14px">${isDupe ? '⚠' : '✓'}</div>
+        <div>
+          <strong>${escapeHTML(c.name)}</strong>, ${escapeHTML(c.country||'?')}${escapeHTML(dates)} ${subText}
+          ${isDupe ? '<div style="font-size:10px;color:var(--amber);font-family:\'JetBrains Mono\',monospace;text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">EXISTS</div>' : ''}
+        </div>
+        ${isDupe ?
+          `<select onchange="setImportAction('${key}', this.value)" class="select-input" style="font-size:11px;padding:4px 8px">
+            <option value="skip">Skip</option>
+            <option value="replace">Replace</option>
+            <option value="add">Add as new</option>
+          </select>` :
+          '<span style="font-size:10px;color:var(--green);font-family:\'JetBrains Mono\',monospace;text-transform:uppercase;letter-spacing:0.06em">NEW</span>'
+        }
+      </div>`;
     });
-    html += '</ul>';
+    html += '</div>';
   }
+
   if (ideas.length > 0) {
-    html += `<div style="margin-bottom:10px"><strong style="font-family:'Fraunces',Georgia,serif">${ideas.length} idea${ideas.length===1?'':'s'} to add</strong></div>`;
-    html += '<ul style="margin:0;padding:0 0 0 18px">';
-    ideas.forEach(i => {
-      const status = i.status ? ` <span class="pill ${i.status}" style="font-size:9px;padding:2px 6px">${i.status}</span>` : '';
-      html += `<li style="margin-bottom:4px"><strong>${escapeHTML(i.name)}</strong>, ${escapeHTML(i.country||'?')}${status}</li>`;
+    html += `<div style="margin-bottom:8px"><strong style="font-family:'Fraunces',Georgia,serif">${ideas.length} idea${ideas.length===1?'':'s'} from notes</strong></div>`;
+    html += '<div style="display:flex;flex-direction:column;gap:6px">';
+    ideas.forEach((i, idx) => {
+      const key = 'idea:' + idx;
+      const isDupe = existingIdeaNames.has((i.name||'').toLowerCase());
+      const statusBadge = i.status ? ` <span class="pill ${i.status}" style="font-size:9px;padding:2px 6px">${i.status}</span>` : '';
+
+      html += `<div style="display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;background:var(--bg-card);border:1px solid var(--border-light);border-radius:6px;padding:8px 12px">
+        <div style="font-size:14px">${isDupe ? '⚠' : '✓'}</div>
+        <div>
+          <strong>${escapeHTML(i.name)}</strong>, ${escapeHTML(i.country||'?')}${statusBadge}
+          ${isDupe ? '<div style="font-size:10px;color:var(--amber);font-family:\'JetBrains Mono\',monospace;text-transform:uppercase;letter-spacing:0.06em;margin-top:2px">EXISTS</div>' : ''}
+        </div>
+        ${isDupe ?
+          `<select onchange="setImportAction('${key}', this.value)" class="select-input" style="font-size:11px;padding:4px 8px">
+            <option value="skip">Skip</option>
+            <option value="replace">Replace</option>
+            <option value="add">Add as new</option>
+          </select>` :
+          '<span style="font-size:10px;color:var(--green);font-family:\'JetBrains Mono\',monospace;text-transform:uppercase;letter-spacing:0.06em">NEW</span>'
+        }
+      </div>`;
     });
-    html += '</ul>';
+    html += '</div>';
   }
+
   previewEl.innerHTML = html;
   document.getElementById('notes-preview').style.display = 'block';
   document.getElementById('notes-apply-btn').style.display = 'inline-block';
-  setNotesStatus('Review the preview, then click "Apply to itinerary" to add.', 'ok');
+  setNotesStatus('Review actions per item, then click "Apply to itinerary".', 'ok');
+}
+
+function setImportAction(key, action) {
+  _notesActions[key] = action;
 }
 
 function applyNotesImport() {
   if (!_notesExtracted) { setNotesStatus('Click Preview first.', 'error'); return; }
 
-  let cityAdded = 0, citySkipped = 0, ideaAdded = 0, ideaSkipped = 0;
+  let cityAdded = 0, cityReplaced = 0, citySkipped = 0;
+  let ideaAdded = 0, ideaReplaced = 0, ideaSkipped = 0;
 
-  // Build lookup for existing names (lowercase)
-  const existingCityNames = new Set((state.cities||[]).map(c => (c.name||'').toLowerCase()));
-  const existingIdeaNames = new Set((state.ideas||[]).map(i => (i.name||'').toLowerCase()));
+  // ----- CITIES -----
+  (_notesExtracted.cities || []).forEach((c, idx) => {
+    if (!c.name) return;
+    const action = _notesActions['city:' + idx] || 'add';
+    if (action === 'skip') { citySkipped++; return; }
 
-  (_notesExtracted.cities || []).forEach(c => {
-    const nameLower = (c.name||'').toLowerCase();
-    if (!c.name || existingCityNames.has(nameLower)) { citySkipped++; return; }
+    const nameLower = c.name.toLowerCase();
+    const existing = state.cities.find(ec => (ec.name||'').toLowerCase() === nameLower);
+
+    if (action === 'replace' && existing) {
+      // Overwrite the existing city in place (preserve id + scores)
+      existing.country = c.country || existing.country;
+      existing.checkIn = c.checkIn || existing.checkIn;
+      existing.checkOut = c.checkOut || existing.checkOut;
+      existing.status = c.status || existing.status;
+      existing.notes = c.notes || existing.notes;
+      // Replace sub-lists entirely if incoming has items, else keep existing
+      if ((c.accommodations||[]).length) {
+        existing.accommodations = c.accommodations.map(a => ({
+          id: newId(),
+          name: a.name || '', link: a.link || '', neighborhood: a.neighborhood || '',
+          checkIn: '', checkOut: '', cost: '', currency: 'USD',
+          status: 'considering', notes: a.notes || ''
+        }));
+      }
+      if ((c.neighborhoods||[]).length) existing.neighborhoods = c.neighborhoods.map(x => ({id: newId(), name: x.name||'', notes: x.notes||''}));
+      if ((c.attractions||[]).length) existing.attractions = c.attractions.map(x => ({id: newId(), name: x.name||'', notes: x.notes||''}));
+      if ((c.restaurants||[]).length) existing.restaurants = c.restaurants.map(x => ({id: newId(), name: x.name||'', notes: x.notes||''}));
+      if ((c.dayTrips||[]).length) existing.dayTrips = c.dayTrips.map(x => ({id: newId(), name: x.name||'', notes: x.notes||''}));
+      if ((c.coworking||[]).length) existing.coworking = c.coworking.map(x => ({id: newId(), name: x.name||'', notes: x.notes||''}));
+      // Coords: re-lookup if missing
+      if ((existing.lat == null || existing.lat === '') && c.country) {
+        const coords = lookupCity(c.name, c.country);
+        if (coords) { existing.lat = coords.lat; existing.lng = coords.lng; }
+      }
+      cityReplaced++;
+      return;
+    }
+
+    // 'add' path (new or duplicate-as-additional)
     const coords = lookupCity(c.name, c.country);
     const city = {
       id: newId(),
@@ -2741,9 +2883,23 @@ function applyNotesImport() {
     cityAdded++;
   });
 
-  (_notesExtracted.ideas || []).forEach(i => {
-    const nameLower = (i.name||'').toLowerCase();
-    if (!i.name || existingIdeaNames.has(nameLower)) { ideaSkipped++; return; }
+  // ----- IDEAS -----
+  (_notesExtracted.ideas || []).forEach((i, idx) => {
+    if (!i.name) return;
+    const action = _notesActions['idea:' + idx] || 'add';
+    if (action === 'skip') { ideaSkipped++; return; }
+
+    const nameLower = i.name.toLowerCase();
+    const existing = state.ideas.find(ei => (ei.name||'').toLowerCase() === nameLower);
+
+    if (action === 'replace' && existing) {
+      existing.country = i.country || existing.country;
+      existing.status = i.status || existing.status;
+      existing.notes = i.notes || existing.notes;
+      ideaReplaced++;
+      return;
+    }
+
     state.ideas.unshift({
       id: newId(),
       name: i.name,
@@ -2759,10 +2915,12 @@ function applyNotesImport() {
 
   const parts = [];
   if (cityAdded) parts.push('+' + cityAdded + ' cit' + (cityAdded===1?'y':'ies'));
+  if (cityReplaced) parts.push('~' + cityReplaced + ' replaced');
+  if (citySkipped) parts.push(citySkipped + ' city skip' + (citySkipped===1?'':'s'));
   if (ideaAdded) parts.push('+' + ideaAdded + ' idea' + (ideaAdded===1?'':'s'));
-  if (citySkipped) parts.push(citySkipped + ' city dup' + (citySkipped===1?'':'s') + ' skipped');
-  if (ideaSkipped) parts.push(ideaSkipped + ' idea dup' + (ideaSkipped===1?'':'s') + ' skipped');
-  toast('Applied: ' + parts.join(', '), 'ok');
+  if (ideaReplaced) parts.push('~' + ideaReplaced + ' idea replaced');
+  if (ideaSkipped) parts.push(ideaSkipped + ' idea skip' + (ideaSkipped===1?'':'s'));
+  toast('Applied: ' + (parts.join(', ') || 'nothing'), 'ok');
   closeNotesImport();
 }
 
@@ -2854,6 +3012,9 @@ function addCity() {
   document.getElementById('add-city-checkin').value = '';
   document.getElementById('add-city-checkout').value = '';
   openCityIds.add(city.id);
+  // Auto-run objective scoring (Schengen + Proximity, local math only)
+  autoScoreCity(city.id);
+  saveState();
   renderAll();
   if (coords) {
     toast('📍 ' + name + ' added with coordinates.', 'ok');
@@ -2869,6 +3030,10 @@ function updateCity(id, key, value) {
   if (!c) return;
   c[key] = value;
   saveState();
+  // Auto-rescore for date / location / country changes
+  if (key === 'checkIn' || key === 'checkOut' || key === 'country' || key === 'lat' || key === 'lng') {
+    autoScoreCity(id);
+  }
   renderNow();
   renderCounters();
   renderCities();
@@ -2884,12 +3049,44 @@ function updateCity(id, key, value) {
 function deleteCity(id) {
   const c = state.cities.find(c => c.id === id);
   if (!c) return;
-  if (armConfirm('deleteCity:' + id, `Click "Delete this city" again to permanently remove ${c.name}.`)) return;
+  if (armConfirm('deleteCity:' + id, `Click delete again to permanently remove ${c.name}.`)) return;
   state.cities = state.cities.filter(c => c.id !== id);
   openCityIds.delete(id);
   saveState();
   renderAll();
   toast('Deleted ' + c.name + '.', 'ok');
+}
+
+function duplicateCity(id) {
+  const original = state.cities.find(c => c.id === id);
+  if (!original) return;
+  // Copy all reusable per-place data (neighborhoods, attractions, restaurants, etc.)
+  // but reset dates, accommodations, scores — those are stay-specific.
+  const newCity = {
+    id: newId(),
+    name: original.name,
+    country: original.country,
+    checkIn: '',
+    checkOut: '',
+    state: original.state || '',
+    status: 'tentative',
+    notes: original.notes || '',
+    estimatedCost: '',
+    lat: original.lat,
+    lng: original.lng,
+    accommodations: [],
+    neighborhoods: (original.neighborhoods || []).map(x => ({ id: newId(), name: x.name, notes: x.notes })),
+    attractions: (original.attractions || []).map(x => ({ id: newId(), name: x.name, notes: x.notes })),
+    restaurants: (original.restaurants || []).map(x => ({ id: newId(), name: x.name, notes: x.notes })),
+    dayTrips: (original.dayTrips || []).map(x => ({ id: newId(), name: x.name, notes: x.notes })),
+    coworking: (original.coworking || []).map(x => ({ id: newId(), name: x.name, notes: x.notes })),
+    friends: (original.friends || []).map(x => ({ id: newId(), name: x.name, notes: x.notes }))
+  };
+  state.cities.push(newCity);
+  openCityIds.add(newCity.id);
+  saveState();
+  renderAll();
+  toast('Duplicated ' + original.name + ' — set new dates in the expanded card.', 'ok');
 }
 
 function addAccommodation(cityId) {
@@ -3801,16 +3998,19 @@ function renderBoard() {
 
 function renderBoardColumn(key, label, cities, granularity, issueIds, alertIds, todayStr) {
   const isBacklog = key === 'backlog';
-  let html = `<div class="board-column ${isBacklog ? 'backlog' : ''}">
+  let html = `<div class="board-column ${isBacklog ? 'backlog' : ''}"
+    data-bucket-key="${escapeHTML(key)}"
+    ondragover="boardDragOver(event)"
+    ondragleave="boardDragLeave(event)"
+    ondrop="boardDrop(event)">
     <div class="board-column-head">
       <span class="title">${escapeHTML(label)}</span>
       <span class="count">${cities.length} cit${cities.length===1?'y':'ies'}</span>
     </div>`;
 
   if (cities.length === 0) {
-    html += '<div class="board-empty">Empty</div>';
+    html += '<div class="board-empty">Drop a city here</div>';
   } else {
-    // Sort cities within column by check-in date
     cities.sort((a, b) => (a.checkIn || '9999').localeCompare(b.checkIn || '9999'));
     cities.forEach(city => {
       let cardCls = 'board-card';
@@ -3829,9 +4029,23 @@ function renderBoardColumn(key, label, cities, granularity, issueIds, alertIds, 
         ? `<span class="pill ${city.status}">${city.status}</span>`
         : '';
 
-      html += `<div class="${cardCls}" onclick="openCityFromBoard('${city.id}')">
+      // Climate hint if available
+      const climateNote = city.scores && city.scores.climate && city.scores.climate.note
+        ? `<div class="meta" style="margin-top:4px;font-style:italic">${escapeHTML(city.scores.climate.note.slice(0, 60))}</div>`
+        : '';
+
+      html += `<div class="${cardCls}"
+        draggable="true"
+        ondragstart="boardDragStart(event, '${city.id}')"
+        ondragend="boardDragEnd(event)"
+        onclick="openCityFromBoard('${city.id}')">
+        <div class="board-card-actions">
+          <button onclick="event.stopPropagation();duplicateCity('${city.id}')" title="Duplicate (for return stays / home base)">⧉</button>
+          <button class="delete" onclick="event.stopPropagation();deleteCity('${city.id}')" title="Delete">✕</button>
+        </div>
         <div class="name">${escapeHTML(city.name || '(unnamed)')}</div>
         <div class="meta">${escapeHTML(city.country || '—')} · ${fmtDateShort(city.checkIn)}–${fmtDateShort(city.checkOut)} · ${nights}n</div>
+        ${climateNote}
         <div class="row">
           <div class="pills">${statusPill}</div>
           ${scoreEl}
@@ -3855,7 +4069,6 @@ function openCityFromBoard(cityId) {
   setTimeout(() => {
     const cards = document.querySelectorAll('#city-list .city');
     cards.forEach(card => {
-      // Match by name in header (rough but works)
       const titleEl = card.querySelector('.city-name');
       const city = state.cities.find(c => c.id === cityId);
       if (city && titleEl && titleEl.textContent === (city.name || '(unnamed)')) {
@@ -3863,6 +4076,114 @@ function openCityFromBoard(cityId) {
       }
     });
   }, 100);
+}
+
+// ==================== BOARD DRAG & DROP ====================
+
+let _dragCityId = null;
+
+function boardDragStart(e, cityId) {
+  _dragCityId = cityId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', cityId);
+  e.target.classList.add('dragging');
+}
+
+function boardDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.board-column.drag-over').forEach(el => el.classList.remove('drag-over'));
+  _dragCityId = null;
+}
+
+function boardDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const col = e.currentTarget;
+  if (!col.classList.contains('drag-over')) col.classList.add('drag-over');
+}
+
+function boardDragLeave(e) {
+  // Only remove if leaving column entirely (not entering child)
+  if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return;
+  e.currentTarget.classList.remove('drag-over');
+}
+
+function boardDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const bucketKey = e.currentTarget.dataset.bucketKey;
+  const cityId = _dragCityId || e.dataTransfer.getData('text/plain');
+  if (!cityId || !bucketKey) return;
+  moveCityToBucket(cityId, bucketKey);
+}
+
+function moveCityToBucket(cityId, bucketKey) {
+  const city = state.cities.find(c => c.id === cityId);
+  if (!city) return;
+
+  if (bucketKey === 'backlog') {
+    city.checkIn = '';
+    city.checkOut = '';
+  } else {
+    const granularity = state.boardGranularity || 'quarter';
+    const range = columnDateRange(bucketKey, granularity);
+
+    if (city.checkIn && city.checkOut) {
+      // Preserve duration, anchor to column start
+      const oldStart = parseDate(city.checkIn);
+      const oldEnd = parseDate(city.checkOut);
+      const durDays = Math.round((oldEnd - oldStart) / 86400000);
+      const newStartDate = parseDate(range.from);
+      const newEndDate = new Date(newStartDate);
+      newEndDate.setDate(newEndDate.getDate() + durDays);
+      const newEndStr = newEndDate.toISOString().slice(0, 10);
+      // Cap at column end if duration would overflow significantly
+      city.checkIn = range.from;
+      city.checkOut = newEndStr > range.to ? range.to : newEndStr;
+    } else {
+      // Default to column boundaries
+      city.checkIn = range.from;
+      city.checkOut = range.to;
+    }
+  }
+
+  // Re-score since dates changed
+  autoScoreCity(cityId);
+  saveState();
+  renderAll();
+  const granularity = state.boardGranularity || 'quarter';
+  toast(`Moved ${city.name} → ${bucketKey === 'backlog' ? 'Backlog' : bucketLabel(bucketKey, granularity)}`, 'ok');
+}
+
+function columnDateRange(key, granularity) {
+  const parts = key.split('-');
+  const y = parseInt(parts[0], 10);
+  if (granularity === 'month') {
+    const m = parseInt(parts[1], 10) - 1;
+    const start = new Date(y, m, 1);
+    const end = new Date(y, m + 1, 0);
+    return { from: toISO(start), to: toISO(end) };
+  } else {
+    const q = parseInt(parts[1].substring(1), 10);
+    const startMonth = (q - 1) * 3;
+    const start = new Date(y, startMonth, 1);
+    const end = new Date(y, startMonth + 3, 0);
+    return { from: toISO(start), to: toISO(end) };
+  }
+}
+
+function toISO(d) {
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// Auto-run objective scoring (Schengen + Proximity) without network calls.
+// Called on city add and after meaningful field changes.
+function autoScoreCity(cityId) {
+  const city = state.cities.find(c => c.id === cityId);
+  if (!city) return;
+  if (!city.scores) city.scores = {};
+  city.scores.schengen = scoreSchengen(city);
+  city.scores.proximity = scoreProximity(city);
 }
 
 // ==================== SCORE MODAL ====================
