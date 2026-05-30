@@ -651,11 +651,30 @@
   <section class="section">
     <div class="section-head">
       <h2>The map</h2>
+      <div class="actions">
+        <select class="select-input" id="map-filter" onchange="onMapFilterChange()">
+          <option value="all">All time</option>
+          <option value="past">Past only</option>
+          <option value="future">Upcoming</option>
+          <option value="now-90">Next 90 days</option>
+          <option value="2026">2026</option>
+          <option value="2027">2027</option>
+          <option value="2026-q3">Q3 2026 (Jul–Sep)</option>
+          <option value="2026-q4">Q4 2026 (Oct–Dec)</option>
+          <option value="2027-q1">Q1 2027 (Jan–Mar)</option>
+          <option value="2027-q2">Q2 2027 (Apr–Jun)</option>
+          <option value="2027-q3">Q3 2027 (Jul–Sep)</option>
+          <option value="2027-q4">Q4 2027 (Oct–Dec)</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <input class="date-input" type="date" id="map-from" style="display:none" onchange="onMapDateChange()">
+        <input class="date-input" type="date" id="map-to" style="display:none" onchange="onMapDateChange()">
+      </div>
       <div class="meta" id="map-meta">—</div>
     </div>
     <div class="map-container">
       <div id="map" style="width:100%;height:100%"></div>
-      <button class="map-reset-btn" id="map-reset-btn" onclick="resetMapView()" title="Fit all pins in view">⤢ Reset view</button>
+      <button class="map-reset-btn" id="map-reset-btn" onclick="resetMapView()" title="Fit all visible pins in view">⤢ Reset view</button>
       <div class="map-empty" id="map-empty" style="display:none">Add cities with coordinates to see them on the map.</div>
       <div class="map-legend">
         <div><span class="dot past"></span>Past</div>
@@ -1045,6 +1064,9 @@ function defaultState() {
     apiKey: '',
     ideaFilter: 'all',
     pastOpen: false,
+    mapFilter: 'all',
+    mapFrom: '',
+    mapTo: '',
     lastSession: ''
   };
 }
@@ -2254,11 +2276,13 @@ function applyImportedJSON(text, source) {
   try {
     state = Object.assign(defaultState(), parsed);
     openCityIds = new Set();
+    const backfilled = backfillCoordinates();
     saveState();
     renderAll();
     const cityCount = (state.cities || []).length;
     const ideaCount = (state.ideas || []).length;
-    const okMsg = `Imported ${cityCount} cit${cityCount===1?'y':'ies'}, ${ideaCount} idea${ideaCount===1?'':'s'}.`;
+    let okMsg = `Imported ${cityCount} cit${cityCount===1?'y':'ies'}, ${ideaCount} idea${ideaCount===1?'':'s'}.`;
+    if (backfilled > 0) okMsg += ` Auto-filled coordinates for ${backfilled}.`;
     if (source === 'paste') {
       setPasteStatus(okMsg + ' Closing…', 'ok');
       setTimeout(closePasteImport, 800);
@@ -2969,10 +2993,15 @@ function buildLatLngRow(city) {
 
 async function geocode(name, country) {
   if (!name) return null;
-  // 1. Try built-in lookup first — instant, no network
+  // 1. Built-in lookup — instant, no network
   const localHit = lookupCity(name, country);
   if (localHit) return localHit;
-  // 2. Try Nominatim (works locally / GitHub Pages; may be blocked in sandboxed previews)
+  // 2. Anthropic API (if configured) — broad knowledge, reliable in any sandbox
+  if (state.aiMode === 'api' && state.apiKey) {
+    const apiHit = await geocodeViaAPI(name, country);
+    if (apiHit) return apiHit;
+  }
+  // 3. Nominatim (works on GitHub Pages / local files; often blocked in artifact sandbox)
   try {
     const q = encodeURIComponent(name + (country ? ', ' + country : ''));
     const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + q, {
@@ -2983,9 +3012,59 @@ async function geocode(name, country) {
     if (!data || data.length === 0) return null;
     return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
   } catch(e) {
-    console.warn('Nominatim fetch failed (likely sandbox CORS). Manual entry needed.', e.message);
+    console.warn('Nominatim fetch failed:', e.message);
     return null;
   }
+}
+
+async function geocodeViaAPI(name, country) {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 100,
+        messages: [{
+          role: 'user',
+          content: `Return ONLY a JSON object with the latitude and longitude of the city named "${name}"${country ? ', in the country: ' + country : ''}. No preamble, no markdown fences. Format: {"lat": 0.0, "lng": 0.0}. If you don't know the city, return {"lat": null, "lng": null}.`
+        }]
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = (data.content || []).map(b => b.text || '').join('').trim();
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(cleaned);
+    if (typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
+      return { lat: parsed.lat, lng: parsed.lng };
+    }
+    return null;
+  } catch(e) {
+    console.warn('API geocoding failed:', e.message);
+    return null;
+  }
+}
+
+// Run synchronous built-in lookup on all cities missing coords (no network, fast)
+function backfillCoordinates() {
+  let count = 0;
+  state.cities.forEach(c => {
+    if (c.name && (c.lat == null || c.lat === '')) {
+      const hit = lookupCity(c.name, c.country);
+      if (hit) {
+        c.lat = hit.lat;
+        c.lng = hit.lng;
+        count++;
+      }
+    }
+  });
+  return count;
 }
 
 // Auto-geocode helper: when both name and country are present and lat/lng not yet set
@@ -3029,9 +3108,12 @@ function renderMap() {
   _mapRetries = 0;
 
   const todayStr = todayISO();
+  const range = getMapFilterRange();
 
-  // Collect points
-  const cityPoints = state.cities.filter(c => c.lat != null && c.lng != null && c.lat !== '' && c.lng !== '');
+  // Collect points, applying the timeline filter
+  const cityPoints = state.cities.filter(c =>
+    c.lat != null && c.lng != null && c.lat !== '' && c.lng !== '' && cityInRange(c, range)
+  );
   const ideaPoints = (state.ideas || []).filter(i => i.lat != null && i.lng != null);
 
   if (cityPoints.length === 0 && ideaPoints.length === 0) {
@@ -3090,7 +3172,8 @@ function renderMap() {
     _map.setView(bounds[0], 6);
   }
 
-  document.getElementById('map-meta').textContent = `${cityPoints.length} cit${cityPoints.length===1?'y':'ies'}${ideaPoints.length ? ' · ' + ideaPoints.length + ' idea' + (ideaPoints.length===1?'':'s') : ''}`;
+  const filterActive = (state.mapFilter && state.mapFilter !== 'all') ? ' (filtered)' : '';
+  document.getElementById('map-meta').textContent = `${cityPoints.length} cit${cityPoints.length===1?'y':'ies'}${ideaPoints.length ? ' · ' + ideaPoints.length + ' idea' + (ideaPoints.length===1?'':'s') : ''}${filterActive}`;
 }
 
 function markerStyleFor(kind) {
@@ -3113,11 +3196,12 @@ function buildPopup(c, kind) {
 
 function resetMapView() {
   if (!_map) return;
+  const range = getMapFilterRange();
   const bounds = [];
   state.cities.forEach(c => {
-    if (c.lat != null && c.lng != null && c.lat !== '' && c.lng !== '') {
-      bounds.push([parseFloat(c.lat), parseFloat(c.lng)]);
-    }
+    if (c.lat == null || c.lng == null || c.lat === '' || c.lng === '') return;
+    if (!cityInRange(c, range)) return;
+    bounds.push([parseFloat(c.lat), parseFloat(c.lng)]);
   });
   (state.ideas || []).forEach(i => {
     if (i.lat != null && i.lng != null && i.lat !== '' && i.lng !== '') {
@@ -3133,10 +3217,89 @@ function resetMapView() {
   }
 }
 
+// Compute date range from filter preset
+function getMapFilterRange() {
+  const filter = state.mapFilter || 'all';
+  const today = todayISO();
+  switch(filter) {
+    case 'all': return null;
+    case 'past': return { from: '1900-01-01', to: today };
+    case 'future': return { from: today, to: '2099-12-31' };
+    case 'now-90': {
+      const d = new Date();
+      d.setDate(d.getDate() + 90);
+      return { from: today, to: d.toISOString().slice(0,10) };
+    }
+    case '2026': return { from: '2026-01-01', to: '2026-12-31' };
+    case '2027': return { from: '2027-01-01', to: '2027-12-31' };
+    case '2026-q3': return { from: '2026-07-01', to: '2026-09-30' };
+    case '2026-q4': return { from: '2026-10-01', to: '2026-12-31' };
+    case '2027-q1': return { from: '2027-01-01', to: '2027-03-31' };
+    case '2027-q2': return { from: '2027-04-01', to: '2027-06-30' };
+    case '2027-q3': return { from: '2027-07-01', to: '2027-09-30' };
+    case '2027-q4': return { from: '2027-10-01', to: '2027-12-31' };
+    case 'custom':
+      if (!state.mapFrom && !state.mapTo) return null;
+      return { from: state.mapFrom || '1900-01-01', to: state.mapTo || '2099-12-31' };
+    default: return null;
+  }
+}
+
+function cityInRange(city, range) {
+  if (!range) return true;
+  // If city has no dates, only show on 'all'
+  if (!city.checkIn || !city.checkOut) return false;
+  // Overlap: city.checkIn <= range.to AND city.checkOut >= range.from
+  return city.checkIn <= range.to && city.checkOut >= range.from;
+}
+
+function onMapFilterChange() {
+  const sel = document.getElementById('map-filter');
+  const newFilter = sel.value;
+  state.mapFilter = newFilter;
+  // Show/hide custom date inputs
+  const fromEl = document.getElementById('map-from');
+  const toEl = document.getElementById('map-to');
+  if (newFilter === 'custom') {
+    fromEl.style.display = '';
+    toEl.style.display = '';
+    fromEl.value = state.mapFrom || '';
+    toEl.value = state.mapTo || '';
+  } else {
+    fromEl.style.display = 'none';
+    toEl.style.display = 'none';
+  }
+  saveState();
+  renderMap();
+}
+
+function onMapDateChange() {
+  state.mapFrom = document.getElementById('map-from').value;
+  state.mapTo = document.getElementById('map-to').value;
+  saveState();
+  renderMap();
+}
+
 // ==================== RENDER ALL ====================
 
 function renderAll() {
   updateHero();
+  // Restore map filter UI state
+  const mapFilterEl = document.getElementById('map-filter');
+  if (mapFilterEl) {
+    mapFilterEl.value = state.mapFilter || 'all';
+    const fromEl = document.getElementById('map-from');
+    const toEl = document.getElementById('map-to');
+    if (state.mapFilter === 'custom') {
+      fromEl.style.display = '';
+      toEl.style.display = '';
+      fromEl.value = state.mapFrom || '';
+      toEl.value = state.mapTo || '';
+    } else {
+      fromEl.style.display = 'none';
+      toEl.style.display = 'none';
+    }
+  }
   renderNow();
   renderCounters();
   renderCities();
