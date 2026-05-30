@@ -893,6 +893,7 @@
           <button id="gran-month-btn" onclick="setGranularity('month')">Month</button>
           <button id="gran-quarter-btn" class="active" onclick="setGranularity('quarter')">Quarter</button>
         </div>
+        <button class="btn-secondary" onclick="openBatchScoreModalForCities()" title="Score all cities in one batched API call (token-efficient)">⚡ Score all</button>
       </div>
       <div class="meta" id="itinerary-meta">—</div>
     </div>
@@ -973,6 +974,10 @@
           <label for="api-key-input">Anthropic API key</label>
           <input class="text-input" type="password" id="api-key-input" style="width:100%" placeholder="sk-ant-..." oninput="setAPIKey(this.value)">
           <div class="muted" style="margin-top:6px">Stored only in your browser. Required for live in-app responses.</div>
+          <div style="margin-top:12px;padding:10px 12px;background:var(--bg-softer);border-radius:6px;font-size:12px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">AI usage</div>
+            <div id="ai-usage-display"><span style="color:var(--text-3)">No AI usage today.</span></div>
+          </div>
         </div>
       </div>
 
@@ -1044,6 +1049,22 @@
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closePasteImport()">Cancel</button>
       <button class="btn-secondary green" onclick="importFromPaste()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- BATCH SCORE CONFIRM MODAL -->
+<div class="modal-bg" id="batch-score-modal-bg" onclick="if(event.target===this)closeBatchScoreModal()">
+  <div class="modal" style="max-width:500px">
+    <h3 id="batch-score-title">Score destinations</h3>
+    <div class="modal-sub" id="batch-score-sub"></div>
+    <div id="batch-score-content" style="margin:14px 0"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);margin-top:8px;cursor:pointer">
+      <input type="checkbox" id="batch-force-rescore"> Force re-score everything (ignore existing scores)
+    </label>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeBatchScoreModal()">Cancel</button>
+      <button class="btn-secondary green" id="batch-confirm-btn" onclick="runBatchScoreConfirmed()">Score now</button>
     </div>
   </div>
 </div>
@@ -1300,6 +1321,7 @@ function defaultState() {
     mapTo: '',
     view: 'list',
     boardGranularity: 'quarter',
+    aiUsage: { date: '', inputTokens: 0, outputTokens: 0 },
     lastSession: ''
   };
 }
@@ -1995,7 +2017,7 @@ function buildAccommodations(city) {
   const wrap = document.createElement('div');
   wrap.className = 'accom-section';
   const capturedId = city.id;
-  wrap.innerHTML = '<h3>Accommodations <button class="btn-secondary" onclick="addAccommodation(\''+capturedId+'\')">+ Add</button></h3>';
+  wrap.innerHTML = '<h3>Accommodations <div style="display:inline-flex;gap:8px;margin-left:auto;align-items:center"><button class="btn-secondary" onclick="openBatchScoreModalForAccoms(\''+capturedId+'\')" title="Score all properties in one batched API call">⚡ Score all</button><button class="btn-secondary" onclick="addAccommodation(\''+capturedId+'\')">+ Add</button></div></h3>';
 
   const list = document.createElement('div');
   list.className = 'accom-list';
@@ -2143,6 +2165,17 @@ function buildAccommodation(city, acc) {
   aiBtn.onclick = () => openAccomAssessment(city, acc);
   actions.appendChild(aiBtn);
 
+  // Fit score badge (if scored)
+  if (acc.fit && acc.fit.score != null) {
+    const fitBadge = document.createElement('span');
+    const fitCls = scoreColorClass(acc.fit.score);
+    fitBadge.className = 'score-badge ' + fitCls;
+    fitBadge.title = acc.fit.note || '';
+    fitBadge.textContent = '★ ' + acc.fit.score + '%';
+    fitBadge.style.cursor = 'help';
+    actions.appendChild(fitBadge);
+  }
+
   const nights = nightsBetween(acc.checkIn, acc.checkOut);
   if (nights > 0) {
     const stat = document.createElement('span');
@@ -2154,6 +2187,14 @@ function buildAccommodation(city, acc) {
     actions.appendChild(stat);
   }
   item.appendChild(actions);
+
+  // Fit reasoning note shown below if scored
+  if (acc.fit && acc.fit.note) {
+    const noteEl = document.createElement('div');
+    noteEl.style.cssText = 'grid-column:1/-1;margin-top:6px;padding:8px 10px;background:var(--bg-softer);border-radius:6px;font-size:12px;color:var(--text-2);font-style:italic';
+    noteEl.textContent = '★ ' + acc.fit.note;
+    item.appendChild(noteEl);
+  }
 
   return item;
 }
@@ -2421,6 +2462,7 @@ function renderSettings() {
   document.querySelector('input[name="ai-mode"][value="'+(state.aiMode||'copy')+'"]').checked = true;
   document.getElementById('api-key-block').style.display = state.aiMode === 'api' ? 'block' : 'none';
   document.getElementById('api-key-input').value = state.apiKey || '';
+  renderAIUsage();
 }
 
 function exportData() {
@@ -3787,12 +3829,343 @@ async function runAICityScore(city) {
       throw new Error('API error (' + res.status + '): ' + errText.slice(0, 200));
     }
     const data = await res.json();
+    if (data.usage) trackAIUsage(data.usage.input_tokens, data.usage.output_tokens);
     const text = (data.content || []).map(b => b.text || '').join('').trim();
     const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     return JSON.parse(cleaned);
   } catch(e) {
     console.warn('AI city score failed:', e.message);
     throw e;
+  }
+}
+
+// ==================== BATCH SCORE MODAL ====================
+
+let _batchScoreContext = null; // { type: 'cities' } or { type: 'accoms', cityId }
+
+function openBatchScoreModalForCities() {
+  if (state.aiMode !== 'api' || !state.apiKey) {
+    toast('API mode + key required for batch scoring. Configure in Settings or use Copy prompt on individual cities.', 'error');
+    return;
+  }
+  _batchScoreContext = { type: 'cities' };
+  const unscored = state.cities.filter(c => c.name && c.country && !(c.scores?.budget?.score != null && c.scores?.culture?.score != null));
+  const total = state.cities.filter(c => c.name && c.country).length;
+  const scored = total - unscored.length;
+  document.getElementById('batch-score-title').textContent = 'Score all cities';
+  document.getElementById('batch-score-sub').textContent = `Batch scoring uses one API call for all cities, ~10× more token-efficient than scoring one at a time.`;
+  // Estimate cost
+  const estInput = 600 + unscored.length * 200;
+  const estOutput = 100 + unscored.length * 250;
+  const estCost = estimateCost(estInput, estOutput);
+  document.getElementById('batch-score-content').innerHTML = `
+    <div style="background:var(--bg-softer);padding:12px;border-radius:8px;font-size:13px;line-height:1.7">
+      <div><strong>${unscored.length}</strong> cit${unscored.length===1?'y':'ies'} to score</div>
+      <div style="color:var(--text-3)">${scored} already scored (will skip unless you force re-score)</div>
+      <hr style="margin:8px 0;border:none;border-top:1px solid var(--border-light)">
+      <div>Estimated tokens: <strong>~${(estInput+estOutput).toLocaleString()}</strong> (${estInput} in / ${estOutput} out)</div>
+      <div>Estimated cost: <strong>${fmtCost(estCost)}</strong> <span style="color:var(--text-3);font-size:11px">(Sonnet 4.6 pricing)</span></div>
+    </div>
+  `;
+  document.getElementById('batch-force-rescore').checked = false;
+  document.getElementById('batch-confirm-btn').disabled = unscored.length === 0;
+  document.getElementById('batch-score-modal-bg').classList.add('show');
+}
+
+function openBatchScoreModalForAccoms(cityId) {
+  if (state.aiMode !== 'api' || !state.apiKey) {
+    toast('API mode + key required for batch scoring. Configure in Settings.', 'error');
+    return;
+  }
+  const city = state.cities.find(c => c.id === cityId);
+  if (!city || !(city.accommodations || []).length) {
+    toast('No accommodations to score.', 'error');
+    return;
+  }
+  _batchScoreContext = { type: 'accoms', cityId };
+  const accoms = city.accommodations.filter(a => a.name || a.link);
+  const unscored = accoms.filter(a => !(a.fit && a.fit.score != null));
+  document.getElementById('batch-score-title').textContent = `Score all properties in ${city.name}`;
+  document.getElementById('batch-score-sub').textContent = 'Batch scoring all candidate properties in one call.';
+  const estInput = 400 + unscored.length * 100;
+  const estOutput = 100 + unscored.length * 150;
+  const estCost = estimateCost(estInput, estOutput);
+  document.getElementById('batch-score-content').innerHTML = `
+    <div style="background:var(--bg-softer);padding:12px;border-radius:8px;font-size:13px;line-height:1.7">
+      <div><strong>${unscored.length}</strong> propert${unscored.length===1?'y':'ies'} to score</div>
+      <div style="color:var(--text-3)">${accoms.length - unscored.length} already scored</div>
+      <hr style="margin:8px 0;border:none;border-top:1px solid var(--border-light)">
+      <div>Estimated cost: <strong>${fmtCost(estCost)}</strong></div>
+    </div>
+  `;
+  document.getElementById('batch-force-rescore').checked = false;
+  document.getElementById('batch-confirm-btn').disabled = unscored.length === 0;
+  document.getElementById('batch-score-modal-bg').classList.add('show');
+}
+
+function closeBatchScoreModal() {
+  document.getElementById('batch-score-modal-bg').classList.remove('show');
+  _batchScoreContext = null;
+}
+
+async function runBatchScoreConfirmed() {
+  const force = document.getElementById('batch-force-rescore').checked;
+  const ctx = _batchScoreContext;
+  closeBatchScoreModal();
+  if (!ctx) return;
+  if (ctx.type === 'cities') {
+    await batchScoreCities(force);
+  } else if (ctx.type === 'accoms') {
+    await batchScoreAccommodations(ctx.cityId, force);
+  }
+}
+
+// ==================== AI USAGE DISPLAY ====================
+
+function renderAIUsage() {
+  const el = document.getElementById('ai-usage-display');
+  if (!el) return;
+  const u = state.aiUsage || {};
+  if (!u.date || (u.inputTokens === 0 && u.outputTokens === 0)) {
+    el.innerHTML = '<span style="color:var(--text-3)">No AI usage today.</span>';
+    return;
+  }
+  const cost = estimateCost(u.inputTokens, u.outputTokens);
+  el.innerHTML = `<span style="color:var(--text-2)">Today: <strong>${(u.inputTokens + u.outputTokens).toLocaleString()}</strong> tokens · ${fmtCost(cost)}</span>`;
+}
+
+// Sonnet 4.6 approx pricing per million tokens
+const PRICE_INPUT_PER_M = 3.0;
+const PRICE_OUTPUT_PER_M = 15.0;
+
+function trackAIUsage(inputTokens, outputTokens) {
+  const today = todayISO();
+  if (!state.aiUsage || state.aiUsage.date !== today) {
+    state.aiUsage = { date: today, inputTokens: 0, outputTokens: 0 };
+  }
+  state.aiUsage.inputTokens += (inputTokens || 0);
+  state.aiUsage.outputTokens += (outputTokens || 0);
+  saveState();
+}
+
+function estimateCost(inputTokens, outputTokens) {
+  return (inputTokens * PRICE_INPUT_PER_M + outputTokens * PRICE_OUTPUT_PER_M) / 1_000_000;
+}
+
+function fmtCost(usd) {
+  if (usd < 0.01) return '<$0.01';
+  if (usd < 1) return '$' + usd.toFixed(3);
+  return '$' + usd.toFixed(2);
+}
+
+// ==================== BATCH CITY SCORING ====================
+
+function buildBatchCityScorePrompt(cities) {
+  const lines = [];
+  lines.push("You are scoring multiple destinations against a traveler's profile. Return ONLY valid JSON, no preamble, no markdown.");
+  lines.push("");
+  lines.push("## Traveler's profile");
+  lines.push(state.profile);
+  lines.push("");
+  lines.push("## Destinations to score");
+  cities.forEach(city => {
+    const nights = cityNights(city);
+    lines.push("");
+    lines.push(`### id=${city.id} — ${city.name}, ${city.country || '?'}`);
+    lines.push(`Stay: ${city.checkIn||'?'} → ${city.checkOut||'?'} (${nights} nights)`);
+    if (city.estimatedCost) lines.push(`Estimated cost: $${city.estimatedCost} USD`);
+    if (city.notes) lines.push(`Notes: ${city.notes}`);
+    const pre = [];
+    if (city.scores?.schengen?.score != null) pre.push(`schengen=${city.scores.schengen.score}`);
+    if (city.scores?.proximity?.score != null) pre.push(`proximity=${city.scores.proximity.score}`);
+    if (city.scores?.climate?.score != null) pre.push(`climate=${city.scores.climate.score}`);
+    if (pre.length) lines.push(`Pre-computed (don't re-score): ${pre.join(', ')}`);
+  });
+  lines.push("");
+  lines.push("## Task");
+  lines.push("For each destination, score on 0-100:");
+  lines.push("- **budget**: affordability vs the traveler's profile and stated estimated cost");
+  lines.push("- **culture**: cultural/lifestyle fit (vibe, walkability, expat scene, attractions, language)");
+  lines.push("- **climate** (ONLY if not pre-computed): climate fit for the stay dates per the profile's HARD constraints");
+  lines.push("");
+  lines.push("Also include `bestMonths`: an array of 1-4 short month names (e.g., [\"Jun\",\"Jul\",\"Aug\"]) representing when this destination is IDEAL based on the profile criteria — regardless of currently planned dates.");
+  lines.push("");
+  lines.push("Output schema (return EXACTLY this shape):");
+  lines.push('{"results": [{"id": "city_id", "budget": {"score": N, "note": "1 sentence"}, "culture": {"score": N, "note": "1 sentence"}, "climate": {"score": N, "note": "1 sentence"}, "bestMonths": ["Jun","Jul"]}]}');
+  return lines.join("\n");
+}
+
+async function batchScoreCities(forceRescoreAll) {
+  if (state.aiMode !== 'api' || !state.apiKey) {
+    toast('API mode + key required. Configure in Settings.', 'error');
+    return;
+  }
+  const candidates = state.cities.filter(c => {
+    if (!c.name || !c.country) return false;
+    if (forceRescoreAll) return true;
+    return !(c.scores?.budget?.score != null && c.scores?.culture?.score != null);
+  });
+  if (candidates.length === 0) {
+    toast('All cities already AI-scored. Use Force re-score to refresh.', 'ok');
+    return;
+  }
+  // Ensure objective scores computed first
+  candidates.forEach(c => autoScoreCity(c.id));
+
+  const prompt = buildBatchCityScorePrompt(candidates);
+  toast(`Scoring ${candidates.length} cities…`);
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: Math.min(8000, 400 + candidates.length * 300),
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error('API error (' + res.status + '): ' + errText.slice(0, 200));
+    }
+    const data = await res.json();
+    if (data.usage) trackAIUsage(data.usage.input_tokens, data.usage.output_tokens);
+    const text = (data.content || []).map(b => b.text || '').join('').trim();
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(cleaned);
+
+    let applied = 0;
+    (parsed.results || []).forEach(r => {
+      const city = state.cities.find(c => c.id === r.id);
+      if (!city) return;
+      if (!city.scores) city.scores = {};
+      if (r.budget) city.scores.budget = r.budget;
+      if (r.culture) city.scores.culture = r.culture;
+      if (r.climate && (!city.scores.climate || city.scores.climate.score == null)) {
+        city.scores.climate = r.climate;
+      }
+      if (r.bestMonths && Array.isArray(r.bestMonths)) city.bestMonths = r.bestMonths;
+      city.scores.computedAt = new Date().toISOString();
+      applied++;
+    });
+
+    saveState();
+    renderAll();
+    const cost = data.usage ? estimateCost(data.usage.input_tokens, data.usage.output_tokens) : 0;
+    toast(`✓ Scored ${applied} cities · ${data.usage ? data.usage.input_tokens + data.usage.output_tokens + ' tokens · ' + fmtCost(cost) : ''}`, 'ok');
+  } catch(err) {
+    toast('Batch scoring failed: ' + err.message, 'error');
+  }
+}
+
+// ==================== BATCH ACCOMMODATION SCORING ====================
+
+function buildBatchAccomScorePrompt(city, accoms) {
+  const nights = cityNights(city);
+  const lines = [];
+  lines.push("You are scoring multiple accommodations against a traveler's profile and trip context. Return ONLY valid JSON, no preamble, no markdown.");
+  lines.push("");
+  lines.push("## Traveler's profile");
+  lines.push(state.profile);
+  lines.push("");
+  lines.push("## Destination context");
+  lines.push(`City: ${city.name}, ${city.country}`);
+  lines.push(`Stay: ${city.checkIn||'?'} → ${city.checkOut||'?'} (${nights} nights)`);
+  if (city.estimatedCost) lines.push(`Budget per stay: $${city.estimatedCost} USD`);
+  if (city.notes) lines.push(`Notes: ${city.notes}`);
+  lines.push("");
+  lines.push("## Properties to score");
+  accoms.forEach(a => {
+    const accomNights = nightsBetween(a.checkIn, a.checkOut);
+    lines.push("");
+    lines.push(`### id=${a.id} — ${a.name || '(unnamed)'}`);
+    if (a.link) lines.push(`Link: ${a.link}`);
+    if (a.neighborhood) lines.push(`Neighborhood: ${a.neighborhood}`);
+    if (a.checkIn || a.checkOut) lines.push(`Dates: ${a.checkIn||'?'} → ${a.checkOut||'?'} (${accomNights} nights of city's ${nights})`);
+    if (a.cost) lines.push(`Cost: $${a.cost} ${a.currency || 'USD'} total ($${Math.round(a.cost / Math.max(1, accomNights))}/night)`);
+    if (a.notes) lines.push(`Notes: ${a.notes}`);
+  });
+  lines.push("");
+  lines.push("## Task");
+  lines.push("For each property, give a fit score 0-100 based on:");
+  lines.push("- Location/neighborhood vs profile preferences");
+  lines.push("- Cost per night vs trip budget");
+  lines.push("- Stay duration vs total city nights (booking 3 of 30 nights is a sketchy partial fit)");
+  lines.push("- Any concerns from the link or notes");
+  lines.push("");
+  lines.push("Output schema (return EXACTLY this shape):");
+  lines.push('{"results": [{"id": "accom_id", "fit": {"score": N, "note": "1-2 sentence reasoning incl. key pros/cons"}}]}');
+  return lines.join("\n");
+}
+
+async function batchScoreAccommodations(cityId, forceRescoreAll) {
+  if (state.aiMode !== 'api' || !state.apiKey) {
+    toast('API mode + key required. Configure in Settings.', 'error');
+    return;
+  }
+  const city = state.cities.find(c => c.id === cityId);
+  if (!city || !(city.accommodations || []).length) {
+    toast('No accommodations to score.', 'error');
+    return;
+  }
+  const candidates = city.accommodations.filter(a => {
+    if (!a.name && !a.link) return false;
+    if (forceRescoreAll) return true;
+    return !(a.fit && a.fit.score != null);
+  });
+  if (candidates.length === 0) {
+    toast('All properties already scored. Use Force re-score to refresh.', 'ok');
+    return;
+  }
+
+  const prompt = buildBatchAccomScorePrompt(city, candidates);
+  toast(`Scoring ${candidates.length} properties…`);
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: Math.min(4000, 300 + candidates.length * 200),
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error('API error (' + res.status + '): ' + errText.slice(0, 200));
+    }
+    const data = await res.json();
+    if (data.usage) trackAIUsage(data.usage.input_tokens, data.usage.output_tokens);
+    const text = (data.content || []).map(b => b.text || '').join('').trim();
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(cleaned);
+
+    let applied = 0;
+    (parsed.results || []).forEach(r => {
+      const accom = city.accommodations.find(a => a.id === r.id);
+      if (!accom || !r.fit) return;
+      accom.fit = r.fit;
+      applied++;
+    });
+
+    saveState();
+    renderAll();
+    const cost = data.usage ? estimateCost(data.usage.input_tokens, data.usage.output_tokens) : 0;
+    toast(`✓ Scored ${applied} properties · ${data.usage ? data.usage.input_tokens + data.usage.output_tokens + ' tokens · ' + fmtCost(cost) : ''}`, 'ok');
+  } catch(err) {
+    toast('Batch scoring failed: ' + err.message, 'error');
   }
 }
 
