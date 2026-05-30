@@ -1,0 +1,3157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plan ahead · Rob</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23c72027'/%3E%3Cpath d='M8 10h16v3H8zm0 5h12v3H8zm0 5h8v3H8z' fill='%23ffffff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" defer></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #cccccc;
+    --bg-card: #ffffff;
+    --bg-soft: #bdbdbd;
+    --bg-softer: #e8e8e8;
+    --text: #242424;
+    --text-2: #4a4a4a;
+    --text-3: #666666;
+    --accent: #c72027;
+    --accent-hover: #9c181d;
+    --accent-soft: #f3d1d3;
+    --border: #a8a8a8;
+    --border-light: #d0d0d0;
+    --green: #2d7d34;
+    --green-soft: #d4e8d5;
+    --amber: #8a6d00;
+    --amber-soft: #ede1be;
+    --red: #b04438;
+    --red-soft: #f3d1d3;
+    --blue: #2c5d8a;
+    --blue-soft: #d3e0ee;
+    --gray: #555555;
+    --gray-soft: #d9d9d9;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+    --shadow: 0 2px 8px rgba(0,0,0,.10);
+    --shadow-lg: 0 4px 16px rgba(0,0,0,.12);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    font-size: 15px;
+    min-height: 100vh;
+  }
+
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  /* HERO */
+  .hero {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    margin-bottom: 40px; gap: 24px; flex-wrap: wrap;
+  }
+  .hero-left h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 56px; line-height: 1; letter-spacing: -0.03em;
+    font-weight: 500; margin-bottom: 8px;
+  }
+  .hero-left h1 .accent { color: var(--accent); font-style: italic; }
+  .hero-left .sub { color: var(--text-2); font-size: 15px; }
+  .hero-right { text-align: right; color: var(--text-3); font-size: 13px; font-family: 'JetBrains Mono', monospace; }
+  .hero-right .last-session { font-size: 11px; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* SECTIONS */
+  .section { margin-bottom: 40px; }
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); gap: 12px; flex-wrap: wrap;
+  }
+  .section-head h2 {
+    font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; letter-spacing: -0.01em;
+  }
+  .section-head .meta {
+    font-size: 12px; color: var(--text-3); font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .section-head .actions { display: flex; gap: 8px; align-items: center; }
+
+  /* BUTTONS */
+  .btn {
+    background: var(--text); color: #ffffff; border: none; border-radius: 8px;
+    padding: 8px 16px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: background 0.15s;
+  }
+  .btn:hover { background: var(--accent); }
+  .btn-secondary {
+    background: var(--bg-soft); color: var(--text-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-secondary:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .btn-secondary:disabled, .btn-secondary[disabled] {
+    opacity: 0.4; cursor: not-allowed; background: var(--bg-soft); color: var(--text-3);
+    border-color: var(--border-light);
+  }
+  .btn-secondary:disabled:hover, .btn-secondary[disabled]:hover {
+    background: var(--bg-soft); color: var(--text-3); border-color: var(--border-light);
+  }
+  .btn-secondary.danger:hover { background: var(--red-soft); color: var(--red); border-color: var(--red); }
+  .btn-secondary.green:hover { background: var(--green-soft); color: var(--green); border-color: var(--green); }
+
+  .icon-btn {
+    background: transparent; border: none; color: var(--text-3); cursor: pointer;
+    padding: 4px 6px; border-radius: 4px; font-size: 14px; line-height: 1; transition: all 0.15s;
+  }
+  .icon-btn:hover { background: var(--bg-soft); color: var(--accent); }
+  .icon-btn.delete:hover { color: var(--red); }
+
+  /* INPUTS */
+  .text-input, .date-input, .num-input, .select-input {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; font-family: 'Inter', sans-serif; font-size: 13px;
+    color: var(--text); transition: border-color 0.15s;
+  }
+  .text-input:focus, .date-input:focus, .num-input:focus, .select-input:focus {
+    outline: none; border-color: var(--accent);
+  }
+
+  /* COUNTERS BAR */
+  .counters {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;
+  }
+  .counter-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; box-shadow: var(--shadow-sm);
+  }
+  .counter-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
+  }
+  .counter-value {
+    font-family: 'Fraunces', Georgia, serif; font-size: 32px; font-weight: 500; line-height: 1;
+  }
+  .counter-value.warn { color: var(--amber); }
+  .counter-value.alert { color: var(--accent); }
+  .counter-value.ok { color: var(--green); }
+  .counter-sub {
+    margin-top: 6px; font-size: 12px; color: var(--text-3);
+  }
+  .counter-breakdown {
+    margin-top: 10px; font-size: 12px; color: var(--text-2); line-height: 1.6;
+  }
+  .counter-breakdown .item {
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .counter-breakdown .item .name { color: var(--text-2); }
+  .counter-breakdown .item .num { font-family: 'JetBrains Mono', monospace; color: var(--text-3); font-size: 11px; }
+
+  /* NOW & NEXT */
+  .now-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 24px; box-shadow: var(--shadow-sm);
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; align-items: center;
+  }
+  .now-card .now-block .label, .now-card .next-block .label {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
+  }
+  .now-card .now-block .place, .now-card .next-block .place {
+    font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; line-height: 1.2;
+  }
+  .now-card .now-block .dates, .now-card .next-block .dates {
+    margin-top: 4px; font-size: 13px; color: var(--text-2);
+  }
+  .now-card .arrow {
+    font-family: 'Fraunces', Georgia, serif; font-size: 28px; color: var(--accent); font-style: italic;
+  }
+  .now-card .next-block { text-align: right; }
+  @media (max-width: 720px) {
+    .now-card { grid-template-columns: 1fr; gap: 12px; }
+    .now-card .arrow { transform: rotate(90deg); }
+    .now-card .next-block { text-align: left; }
+  }
+  .now-empty {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 32px; text-align: center; color: var(--text-3); font-style: italic;
+  }
+
+  /* WARNINGS */
+  .warnings { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  .warning {
+    background: var(--amber-soft); border: 1px solid var(--amber); border-radius: 8px;
+    padding: 10px 14px; font-size: 13px; color: var(--amber);
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .warning.alert {
+    background: var(--red-soft); border-color: var(--red); color: var(--red);
+  }
+  .warning .icon { font-weight: 700; }
+
+  /* CITY CARDS (Itinerary) */
+  .add-city-row {
+    display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr auto; gap: 8px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px; margin-bottom: 16px; align-items: center;
+  }
+  @media (max-width: 720px) {
+    .add-city-row { grid-template-columns: 1fr; }
+  }
+  .city-list { display: flex; flex-direction: column; gap: 12px; }
+  .city {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow-sm); transition: box-shadow 0.15s;
+  }
+  .city:hover { box-shadow: var(--shadow); }
+  .city.has-issue { border-color: var(--amber); }
+  .city.has-alert { border-color: var(--red); }
+  .city-header {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 16px;
+    padding: 16px 20px; align-items: center; cursor: pointer;
+  }
+  .city-header:hover { background: var(--bg-softer); border-radius: 12px 12px 0 0; }
+  .city-title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .city-name {
+    font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; letter-spacing: -0.01em;
+  }
+  .city-country {
+    font-size: 13px; color: var(--text-3); font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .city-dates {
+    font-size: 13px; color: var(--text-2); font-family: 'JetBrains Mono', monospace;
+  }
+  .city-stats {
+    display: flex; gap: 16px; font-size: 12px; color: var(--text-3); font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .city-stats .stat .num { color: var(--text); font-weight: 500; }
+  .city-chev {
+    color: var(--text-3); font-size: 16px; transition: transform 0.2s;
+  }
+  .city.open .city-chev { transform: rotate(90deg); }
+  .city-body {
+    display: none; padding: 0 20px 20px; border-top: 1px solid var(--border-light);
+  }
+  .city.open .city-body { display: block; }
+  .city-fields {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding-top: 16px;
+  }
+  @media (max-width: 720px) {
+    .city-fields { grid-template-columns: 1fr; }
+    .city-header { grid-template-columns: 1fr auto; }
+    .city-stats { display: none; }
+  }
+  .field-label {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; display: block;
+  }
+  .field-input {
+    width: 100%; background: var(--bg-card); border: 1px solid var(--border-light);
+    border-radius: 6px; padding: 6px 10px; font-size: 13px; font-family: 'Inter', sans-serif;
+  }
+  .field-input:focus { outline: none; border-color: var(--accent); }
+
+  .city-notes-block { margin-top: 16px; }
+  .notes-area {
+    width: 100%; min-height: 60px; background: var(--bg-card); border: 1px solid var(--border-light);
+    border-radius: 6px; padding: 10px 12px; font-size: 13px; font-family: 'Inter', sans-serif;
+    color: var(--text); line-height: 1.5; resize: vertical;
+  }
+  .notes-area:focus { outline: none; border-color: var(--accent); }
+
+  /* SUBSECTIONS WITHIN CITY */
+  .city-subsections {
+    margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+  }
+  @media (max-width: 900px) {
+    .city-subsections { grid-template-columns: 1fr; }
+  }
+  .subsection {
+    background: var(--bg-softer); border-radius: 10px; padding: 14px 16px;
+  }
+  .subsection-head {
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;
+  }
+  .subsection-title {
+    font-family: 'Fraunces', Georgia, serif; font-size: 15px; font-weight: 500;
+  }
+  .subsection-add-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .subsection-add-row .text-input { flex: 1; font-size: 12px; padding: 6px 10px; }
+  .subsection-list { display: flex; flex-direction: column; gap: 4px; }
+  .sub-item {
+    background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 6px;
+    padding: 8px 10px; font-size: 13px; display: flex; gap: 8px; align-items: flex-start;
+  }
+  .sub-item-main { flex: 1; min-width: 0; }
+  .sub-item-name { font-weight: 500; outline: none; padding: 2px 4px; border-radius: 3px; }
+  .sub-item-name:focus { background: var(--accent-soft); }
+  .sub-item-meta {
+    font-size: 11px; color: var(--text-3); margin-top: 2px;
+    outline: none; padding: 2px 4px; border-radius: 3px;
+  }
+  .sub-item-meta:focus { background: var(--accent-soft); }
+  .sub-item-meta:empty:before {
+    content: attr(data-placeholder); color: var(--text-3); font-style: italic;
+  }
+  .sub-empty {
+    text-align: center; padding: 12px; color: var(--text-3); font-style: italic; font-size: 12px;
+  }
+
+  /* ACCOMMODATIONS (special card) */
+  .accom-section { margin-top: 20px; }
+  .accom-section h3 {
+    font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500;
+    margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .accom-add-row {
+    background: var(--bg-softer); border-radius: 8px; padding: 12px;
+    display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 6px;
+    margin-bottom: 10px; align-items: center;
+  }
+  @media (max-width: 720px) {
+    .accom-add-row { grid-template-columns: 1fr; }
+  }
+  .accom-list { display: flex; flex-direction: column; gap: 8px; }
+  .accom-item {
+    background: var(--bg-softer); border: 1px solid var(--border-light); border-radius: 8px;
+    padding: 12px;
+  }
+  .accom-row1 {
+    display: grid; grid-template-columns: 2fr auto auto; gap: 12px; align-items: center;
+  }
+  .accom-name {
+    font-weight: 500; outline: none; padding: 2px 4px; border-radius: 3px; font-size: 14px;
+  }
+  .accom-name:focus { background: var(--accent-soft); }
+  .accom-link {
+    font-size: 12px; color: var(--blue); text-decoration: none; padding: 2px 4px;
+    border-radius: 3px; outline: none;
+  }
+  .accom-link:focus { background: var(--accent-soft); }
+  .accom-link:hover { text-decoration: underline; }
+  .accom-row2 {
+    display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 8px;
+  }
+  @media (max-width: 720px) {
+    .accom-row1 { grid-template-columns: 1fr; }
+    .accom-row2 { grid-template-columns: 1fr 1fr; }
+  }
+  .accom-mini-field {
+    background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 5px;
+    padding: 5px 8px; font-size: 12px; font-family: 'Inter', sans-serif;
+  }
+  .accom-mini-field:focus { outline: none; border-color: var(--accent); }
+  .accom-actions {
+    margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  }
+
+  /* STATUS PILLS */
+  .pill {
+    display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px;
+    font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em;
+    font-weight: 500;
+  }
+  .pill.considering { background: var(--gray-soft); color: var(--gray); }
+  .pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
+  .pill.booked, .pill.confirmed { background: var(--green-soft); color: var(--green); }
+  .pill.eliminated, .pill.rejected { background: var(--bg-soft); color: var(--text-3); text-decoration: line-through; }
+  .pill.tentative { background: var(--amber-soft); color: var(--amber); }
+
+  /* IDEAS */
+  .idea-add-row {
+    display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: center;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px; margin-bottom: 12px;
+  }
+  @media (max-width: 720px) {
+    .idea-add-row { grid-template-columns: 1fr; }
+  }
+  .filter-pills {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;
+  }
+  .filter-pill {
+    background: var(--bg-card); border: 1px solid var(--border); color: var(--text-2);
+    padding: 4px 12px; border-radius: 999px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: all 0.15s;
+  }
+  .filter-pill:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-pill.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .idea-list { display: flex; flex-direction: column; gap: 8px; }
+  .idea {
+    background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;
+    padding: 10px 14px; display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: center;
+  }
+  .idea.eliminated { opacity: 0.6; }
+  .idea-main { min-width: 0; }
+  .idea-name { font-weight: 500; outline: none; padding: 2px 4px; border-radius: 3px; }
+  .idea-name:focus { background: var(--accent-soft); }
+  .idea-notes {
+    font-size: 12px; color: var(--text-3); margin-top: 2px;
+    outline: none; padding: 2px 4px; border-radius: 3px;
+  }
+  .idea-notes:focus { background: var(--accent-soft); }
+  .idea-notes:empty:before {
+    content: attr(data-placeholder); font-style: italic;
+  }
+  .idea select { font-size: 11px; padding: 4px 8px; }
+
+  /* TRAVEL PROFILE */
+  .profile-area {
+    width: 100%; min-height: 200px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px; font-size: 13px; font-family: 'Inter', sans-serif;
+    color: var(--text); line-height: 1.6; resize: vertical;
+  }
+  .profile-area:focus { outline: none; border-color: var(--accent); }
+
+  /* SETTINGS */
+  .settings-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media (max-width: 720px) {
+    .settings-grid { grid-template-columns: 1fr; }
+  }
+  .setting-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .setting-card h3 {
+    font-family: 'Fraunces', Georgia, serif; font-size: 16px; font-weight: 500; margin-bottom: 10px;
+  }
+  .setting-card label {
+    display: block; font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 4px;
+  }
+  .setting-card input[type="radio"] { margin-right: 6px; }
+  .setting-radio-row { display: flex; gap: 16px; margin-bottom: 12px; font-size: 13px; }
+  .setting-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* MODAL */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100;
+    display: none; align-items: center; justify-content: center;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: var(--bg-card); border-radius: 12px; padding: 24px;
+    max-width: 700px; width: calc(100% - 32px); max-height: 80vh; overflow-y: auto;
+  }
+  .modal h3 {
+    font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500;
+    margin-bottom: 12px;
+  }
+  .modal-sub { color: var(--text-3); font-size: 13px; margin-bottom: 16px; }
+  .modal-textarea {
+    width: 100%; min-height: 240px; background: var(--bg-softer); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--text); line-height: 1.6; resize: vertical; white-space: pre-wrap;
+  }
+  .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; flex-wrap: wrap; }
+
+  /* SAVED INDICATOR */
+  .saved {
+    position: fixed; bottom: 20px; right: 20px;
+    background: var(--text); color: white; padding: 8px 14px; border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.08em; opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 50;
+  }
+  .saved.show { opacity: 0.9; }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 60px; right: 20px;
+    background: var(--text); color: white; padding: 10px 16px; border-radius: 8px;
+    font-size: 13px; max-width: 320px;
+    opacity: 0; transform: translateY(10px); transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none; z-index: 200; box-shadow: var(--shadow-lg);
+  }
+  .toast.show { opacity: 0.95; transform: translateY(0); }
+  .toast.error { background: var(--red); }
+  .toast.ok { background: var(--green); }
+
+  /* MISC */
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 0; }
+  .muted { color: var(--text-3); font-size: 12px; }
+  hr.divider {
+    border: none; border-top: 1px solid var(--border-light); margin: 20px 0;
+  }
+
+  /* Helper for the day-counter detail toggle */
+  .counter-card.expandable { cursor: pointer; }
+  .counter-card .breakdown-toggle {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-top: 8px;
+  }
+  .counter-card .counter-breakdown.hidden { display: none; }
+
+  /* MAP */
+  .map-container {
+    position: relative;
+    height: 420px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    background: var(--bg-softer);
+  }
+  .map-empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--text-3); font-style: italic; z-index: 1; text-align: center; padding: 24px;
+  }
+  .leaflet-container {
+    background: var(--bg-softer);
+    font-family: 'Inter', sans-serif;
+  }
+  .map-popup {
+    font-family: 'Inter', sans-serif; font-size: 13px;
+  }
+  .map-popup .name {
+    font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 15px; margin-bottom: 2px;
+  }
+  .map-popup .meta {
+    color: var(--text-3); font-size: 11px; font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .map-popup .dates { color: var(--text-2); font-size: 12px; margin-top: 4px; }
+  .map-legend {
+    position: absolute; bottom: 10px; right: 10px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; font-size: 11px; font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.06em; z-index: 1000;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .map-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .map-legend .dot.past { background: #888; }
+  .map-legend .dot.now { background: var(--accent); }
+  .map-legend .dot.future { background: white; border: 2px solid var(--accent); }
+  .map-legend .dot.idea { background: var(--blue); }
+
+  /* PAST SECTION */
+  .past-section {
+    margin-top: 24px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 4px;
+  }
+  .past-toggle {
+    display: flex; justify-content: space-between; align-items: center;
+    border-radius: 10px; padding: 12px 16px;
+    cursor: pointer; user-select: none;
+    transition: background 0.15s;
+  }
+  .past-toggle:hover { background: rgba(0,0,0,0.04); }
+  .past-toggle h3 {
+    font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500;
+  }
+  .past-toggle .meta {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .past-toggle .chev { color: var(--text-3); transition: transform 0.2s; }
+  .past-section.open .past-toggle .chev { transform: rotate(90deg); }
+  .past-list {
+    display: none; flex-direction: column; gap: 8px;
+    padding: 4px 12px 12px 28px;
+    border-left: 3px solid var(--accent-soft);
+    margin: 0 12px 8px 24px;
+  }
+  .past-section.open .past-list { display: flex; }
+  .past-list .city {
+    background: var(--bg-card);
+    border-color: var(--border-light);
+  }
+  .city.past { opacity: 0.85; }
+  .city.past .city-name { color: var(--text-2); }
+  @media (max-width: 720px) {
+    .past-list { padding: 4px 8px 8px 16px; margin: 0 4px 8px 12px; }
+  }
+
+  /* FOOTER */
+  .footer {
+    margin-top: 60px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    line-height: 1.7;
+  }
+  .footer a { color: var(--text-3); text-decoration: none; transition: color 0.15s; }
+  .footer a:hover { color: var(--accent); }
+  .footer-privacy { margin-top: 6px; }
+
+  /* MAP RESET BUTTON */
+  .map-reset-btn {
+    position: absolute;
+    top: 10px;
+    left: 52px;
+    z-index: 1000;
+    background: white;
+    border: 2px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-2);
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    transition: all 0.15s;
+  }
+  .map-reset-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .map-reset-btn:disabled { display: none; }
+
+  /* LAT/LNG ROW */
+  .latlng-row {
+    display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end;
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light);
+  }
+  @media (max-width: 720px) { .latlng-row { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="hero-left">
+      <h1>Plan <span class="accent">ahead.</span></h1>
+      <p class="sub">The antidote to "where am I sleeping next week?"</p>
+    </div>
+    <div class="hero-right">
+      <div id="hero-date"></div>
+      <div class="last-session" id="hero-last">LAST TOUCHED —</div>
+    </div>
+  </header>
+
+  <!-- NOW & NEXT -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Where you are</h2>
+      <div class="meta" id="now-meta">—</div>
+    </div>
+    <div id="now-now"></div>
+    <div class="warnings" id="now-warnings"></div>
+  </section>
+
+  <!-- MAP -->
+  <section class="section">
+    <div class="section-head">
+      <h2>The map</h2>
+      <div class="meta" id="map-meta">—</div>
+    </div>
+    <div class="map-container">
+      <div id="map" style="width:100%;height:100%"></div>
+      <button class="map-reset-btn" id="map-reset-btn" onclick="resetMapView()" title="Fit all pins in view">⤢ Reset view</button>
+      <div class="map-empty" id="map-empty" style="display:none">Add cities with coordinates to see them on the map.</div>
+      <div class="map-legend">
+        <div><span class="dot past"></span>Past</div>
+        <div><span class="dot now"></span>Current</div>
+        <div><span class="dot future"></span>Future</div>
+        <div><span class="dot idea"></span>Idea</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COUNTERS -->
+  <section class="section">
+    <div class="section-head">
+      <h2>By the numbers</h2>
+      <div class="meta">days · countries · cost</div>
+    </div>
+    <div class="counters" id="counters"></div>
+  </section>
+
+  <!-- ITINERARY -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Itinerary</h2>
+      <div class="meta" id="itinerary-meta">—</div>
+    </div>
+
+    <div class="add-city-row">
+      <input class="text-input" id="add-city-name" placeholder="City (e.g. Sarandë)">
+      <select class="select-input" id="add-city-country" title="Country">
+        <option value="">Country</option>
+      </select>
+      <input class="date-input" type="date" id="add-city-checkin" title="Check-in">
+      <input class="date-input" type="date" id="add-city-checkout" title="Check-out">
+      <button class="btn" onclick="addCity()">Add</button>
+    </div>
+
+    <div class="city-list" id="city-list"></div>
+  </section>
+
+  <!-- IDEAS -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Ideas</h2>
+      <div class="meta" id="ideas-meta">—</div>
+    </div>
+
+    <div class="idea-add-row">
+      <input class="text-input" id="add-idea-name" placeholder="Destination (e.g. Lisbon)">
+      <select class="select-input" id="add-idea-country">
+        <option value="">Country</option>
+      </select>
+      <select class="select-input" id="add-idea-status">
+        <option value="considering">Considering</option>
+        <option value="shortlisted">Shortlisted</option>
+        <option value="booked">Booked</option>
+        <option value="eliminated">Eliminated</option>
+      </select>
+      <button class="btn" onclick="addIdea()">Add</button>
+    </div>
+
+    <div class="filter-pills" id="idea-filters"></div>
+    <div class="idea-list" id="idea-list"></div>
+  </section>
+
+  <!-- TRAVEL PROFILE -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Travel profile</h2>
+      <div class="actions">
+        <button class="btn-secondary" onclick="resetProfile()">Reset to default</button>
+      </div>
+    </div>
+    <div class="muted" style="margin-bottom:10px">Your criteria. Used as context when generating AI assessment prompts. Edit freely.</div>
+    <textarea class="profile-area" id="profile-area"></textarea>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="section">
+    <div class="section-head">
+      <h2>Settings</h2>
+      <div class="meta">data stays in your browser</div>
+    </div>
+
+    <div class="settings-grid">
+      <div class="setting-card">
+        <h3>AI integration</h3>
+        <div class="setting-radio-row">
+          <label><input type="radio" name="ai-mode" value="copy" onchange="setAIMode('copy')"> Copy to clipboard</label>
+          <label><input type="radio" name="ai-mode" value="api" onchange="setAIMode('api')"> Anthropic API</label>
+        </div>
+        <div id="api-key-block" style="display:none">
+          <label for="api-key-input">Anthropic API key</label>
+          <input class="text-input" type="password" id="api-key-input" style="width:100%" placeholder="sk-ant-..." oninput="setAPIKey(this.value)">
+          <div class="muted" style="margin-top:6px">Stored only in your browser. Required for live in-app responses.</div>
+        </div>
+      </div>
+
+      <div class="setting-card">
+        <h3>Data</h3>
+        <div class="setting-actions">
+          <button class="btn-secondary green" onclick="exportData()">Export JSON</button>
+          <button class="btn-secondary" onclick="triggerFileImport()">Import JSON file</button>
+          <button class="btn-secondary" onclick="openPasteImport()">Paste JSON</button>
+          <button class="btn-secondary" onclick="openNotesImport()">🧠 Import from notes</button>
+          <button class="btn-secondary" onclick="toggleSnapshots()">Snapshots</button>
+          <button class="btn-secondary danger" onclick="resetAll()">Reset everything</button>
+        </div>
+        <div id="data-status" class="muted" style="margin-top:10px;min-height:18px">Auto-saved continuously to your browser. Export regularly — browser data can be wiped.</div>
+        <div id="snapshots-block" style="display:none;margin-top:14px">
+          <label style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:8px;display:block">Snapshot history (auto, every 10 min)</label>
+          <div id="snapshots-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div>Built by <a href="https://robriggs.com" target="_blank" rel="noopener noreferrer">Rob Riggs</a> · <a href="https://codeconspirators.com" target="_blank" rel="noopener noreferrer">Code Conspirators</a> · <a href="https://github.com/robriggs3/plan-ahead" target="_blank" rel="noopener noreferrer" id="footer-github">View on GitHub</a></div>
+    <div class="footer-privacy">Your data never leaves your browser.</div>
+  </footer>
+
+</div>
+
+<!-- MODAL: generic AI workflow -->
+<div class="modal-bg" id="modal-bg" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h3 id="modal-title">AI workflow</h3>
+    <div class="modal-sub" id="modal-sub"></div>
+
+    <div class="muted" style="margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;font-family:'JetBrains Mono',monospace">Prompt</div>
+    <textarea class="modal-textarea" id="modal-textarea" readonly></textarea>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal()">Close</button>
+      <button class="btn-secondary green" id="modal-copy-btn" onclick="copyPrompt()">📋 Copy prompt</button>
+      <a class="btn-secondary" id="modal-open-claude" href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">↗ Open Claude.ai</a>
+      <button class="btn" id="modal-api-btn" onclick="runAPI()" style="display:none">⚡ Run via API</button>
+    </div>
+
+    <div id="modal-pasteback-section" style="margin-top:20px">
+      <hr class="divider" style="margin:0 0 14px">
+      <div class="muted" style="margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;font-family:'JetBrains Mono',monospace">AI response (paste below if using copy mode)</div>
+      <textarea class="modal-textarea" id="modal-paste-back" placeholder='Paste the JSON response from Claude here, then click Apply.'></textarea>
+      <div class="modal-actions">
+        <button class="btn green" onclick="applyAIResponse()">✓ Apply response</button>
+      </div>
+    </div>
+
+    <div id="modal-result" style="margin-top:16px;display:none">
+      <hr class="divider" style="margin:0 0 14px">
+      <div class="muted" style="margin-bottom:6px;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;font-family:'JetBrains Mono',monospace">Result</div>
+      <div id="modal-result-content" style="white-space:pre-wrap;background:var(--bg-softer);padding:14px;border-radius:8px;font-size:13px;line-height:1.6"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PASTE IMPORT MODAL -->
+<div class="modal-bg" id="paste-modal-bg" onclick="if(event.target===this)closePasteImport()">
+  <div class="modal">
+    <h3>Paste JSON to import</h3>
+    <div class="modal-sub">Open your exported JSON file in any text editor, copy all contents, and paste below. This will replace all current data.</div>
+    <textarea class="modal-textarea" id="paste-import-area" placeholder='Paste the contents of your plan-ahead-YYYY-MM-DD.json file here…'></textarea>
+    <div id="paste-status" style="margin-top:10px;font-size:13px;min-height:18px"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closePasteImport()">Cancel</button>
+      <button class="btn-secondary green" onclick="importFromPaste()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- NOTES IMPORT MODAL -->
+<div class="modal-bg" id="notes-modal-bg" onclick="if(event.target===this)closeNotesImport()">
+  <div class="modal" style="max-width:780px">
+    <h3>Import from notes</h3>
+    <div class="modal-sub">Paste any text — a conversation, planning doc, brain dump. AI will extract destinations, dates, neighborhoods, restaurants, and more. Adds to your existing data (does not replace).</div>
+
+    <label style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:6px;display:block">Step 1 — Your notes</label>
+    <textarea class="modal-textarea" id="notes-input" placeholder="Paste anything: chat history, trip notes, an article about a city you like…" style="min-height:180px"></textarea>
+
+    <div id="notes-actions-1" style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-secondary green" id="notes-ai-btn" onclick="runNotesAI()">⚡ Process with AI (live)</button>
+      <button class="btn-secondary" onclick="copyNotesPrompt()">📋 Copy extraction prompt</button>
+      <a class="btn-secondary" href="https://claude.ai/new" target="_blank" rel="noopener noreferrer" style="text-decoration:none">Open Claude.ai ↗</a>
+    </div>
+    <div id="notes-status" style="margin-top:10px;font-size:13px;min-height:18px;color:var(--text-3)"></div>
+
+    <div id="notes-step2" style="margin-top:16px;display:none">
+      <label style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:6px;display:block">Step 2 — AI's JSON response</label>
+      <textarea class="modal-textarea" id="notes-json" placeholder="Paste the JSON the AI returned, then click Preview"></textarea>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn-secondary" onclick="previewNotesImport()">Preview destinations</button>
+      </div>
+    </div>
+
+    <div id="notes-preview" style="margin-top:16px;display:none">
+      <label style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:6px;display:block">Step 3 — Preview</label>
+      <div id="notes-preview-content" style="background:var(--bg-softer);padding:12px 14px;border-radius:8px;font-size:13px;max-height:240px;overflow-y:auto"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeNotesImport()">Cancel</button>
+      <button class="btn-secondary green" id="notes-apply-btn" onclick="applyNotesImport()" style="display:none">Apply to itinerary</button>
+    </div>
+  </div>
+</div>
+
+<div class="saved" id="saved">SAVED</div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+const STORAGE_KEY = 'planahead:v1';
+const SNAPSHOTS_KEY = 'planahead:snapshots';
+const MAX_SNAPSHOTS = 5;
+const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+
+// ==================== CONSTANTS ====================
+
+const SCHENGEN_COUNTRIES = [
+  'Austria','Belgium','Bulgaria','Croatia','Czech Republic','Denmark','Estonia','Finland',
+  'France','Germany','Greece','Hungary','Iceland','Italy','Latvia','Liechtenstein',
+  'Lithuania','Luxembourg','Malta','Netherlands','Norway','Poland','Portugal','Romania',
+  'Slovakia','Slovenia','Spain','Sweden','Switzerland'
+];
+
+// Countries list — Schengen first, then common nomad countries, then everywhere
+const ALL_COUNTRIES = [
+  ...SCHENGEN_COUNTRIES,
+  'Albania','Argentina','Armenia','Australia','Bahamas','Bali','Bolivia','Bosnia and Herzegovina',
+  'Brazil','Cambodia','Canada','Cape Verde','Chile','China','Colombia','Costa Rica','Cyprus',
+  'Dominican Republic','Ecuador','Egypt','El Salvador','Georgia','Ghana','Guatemala','Honduras',
+  'India','Indonesia','Ireland','Israel','Jamaica','Japan','Jordan','Kenya','Laos','Lebanon',
+  'Malaysia','Mauritius','Mexico','Moldova','Monaco','Mongolia','Montenegro','Morocco',
+  'Mozambique','Myanmar','Nepal','New Zealand','Nicaragua','Nigeria','North Macedonia','Pakistan',
+  'Panama','Paraguay','Peru','Philippines','Qatar','Russia','Rwanda','Saudi Arabia','Senegal',
+  'Serbia','Seychelles','Singapore','South Africa','South Korea','Sri Lanka','Taiwan',
+  'Tanzania','Thailand','Turkey','Türkiye','UAE','Uganda','Ukraine','United Kingdom','United States',
+  'Uruguay','Vatican City','Venezuela','Vietnam'
+].filter((v,i,a) => a.indexOf(v) === i).sort();
+
+const US_STATES = [
+  'AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA',
+  'ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR',
+  'PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'
+];
+
+// Built-in city coordinates — instant lookup with no network. Covers common nomad destinations
+// and cities discussed in our planning. Format: "name|country" (lowercase) → [lat, lng]
+const CITY_COORDS = {
+  // Spain
+  'malaga|spain': [36.7213, -4.4214], 'málaga|spain': [36.7213, -4.4214],
+  'madrid|spain': [40.4168, -3.7038], 'barcelona|spain': [41.3851, 2.1734],
+  'valencia|spain': [39.4699, -0.3763], 'seville|spain': [37.3891, -5.9845],
+  'sevilla|spain': [37.3891, -5.9845], 'granada|spain': [37.1773, -3.5986],
+  // Portugal
+  'lisbon|portugal': [38.7223, -9.1393], 'lisboa|portugal': [38.7223, -9.1393],
+  'porto|portugal': [41.1579, -8.6291], 'funchal|portugal': [32.6669, -16.9241],
+  'madeira|portugal': [32.7607, -16.9595], 'ponta delgada|portugal': [37.7412, -25.6756],
+  // Albania
+  'sarandë|albania': [39.8755, 20.0053], 'sarande|albania': [39.8755, 20.0053],
+  'tirana|albania': [41.3275, 19.8187], 'ksamil|albania': [39.7686, 20.0042],
+  // Turkey
+  'istanbul|turkey': [41.0082, 28.9784], 'istanbul|türkiye': [41.0082, 28.9784],
+  'antalya|turkey': [36.8969, 30.7133], 'ankara|turkey': [39.9334, 32.8597],
+  // Georgia
+  'tbilisi|georgia': [41.7151, 44.8271], 'batumi|georgia': [41.6168, 41.6367],
+  // Morocco
+  'essaouira|morocco': [31.5125, -9.7700], 'marrakech|morocco': [31.6295, -7.9811],
+  'casablanca|morocco': [33.5731, -7.5898], 'tangier|morocco': [35.7595, -5.8340],
+  'taghazout|morocco': [30.5447, -9.7100], 'fez|morocco': [34.0181, -5.0078],
+  // Cape Verde
+  'mindelo|cape verde': [16.8901, -24.9805], 'praia|cape verde': [14.9330, -23.5133],
+  'santa maria|cape verde': [16.5947, -22.9082], 'sal|cape verde': [16.7345, -22.9494],
+  // Mexico
+  'mexico city|mexico': [19.4326, -99.1332], 'cdmx|mexico': [19.4326, -99.1332],
+  'oaxaca|mexico': [17.0732, -96.7266], 'oaxaca city|mexico': [17.0732, -96.7266],
+  'sayulita|mexico': [20.8696, -105.4419], 'puerto vallarta|mexico': [20.6534, -105.2253],
+  'san pancho|mexico': [20.9036, -105.4575], 'bucerías|mexico': [20.7501, -105.3331],
+  'bucerias|mexico': [20.7501, -105.3331], 'mérida|mexico': [20.9674, -89.5926],
+  'merida|mexico': [20.9674, -89.5926], 'san miguel de allende|mexico': [20.9145, -100.7430],
+  'guadalajara|mexico': [20.6597, -103.3496], 'tulum|mexico': [20.2114, -87.4654],
+  'la paz|mexico': [24.1426, -110.3128], 'todos santos|mexico': [23.4467, -110.2233],
+  // Costa Rica
+  'tamarindo|costa rica': [10.2997, -85.8407], 'nosara|costa rica': [9.9776, -85.6529],
+  'santa teresa|costa rica': [9.6442, -85.1654], 'puerto viejo|costa rica': [9.6552, -82.7541],
+  'san josé|costa rica': [9.9281, -84.0907], 'san jose|costa rica': [9.9281, -84.0907],
+  'atenas|costa rica': [9.9803, -84.3786],
+  // Argentina
+  'buenos aires|argentina': [-34.6037, -58.3816], 'mendoza|argentina': [-32.8895, -68.8458],
+  'bariloche|argentina': [-41.1335, -71.3103], 'córdoba|argentina': [-31.4201, -64.1888],
+  // Brazil
+  'florianópolis|brazil': [-27.5954, -48.5480], 'florianopolis|brazil': [-27.5954, -48.5480],
+  'rio de janeiro|brazil': [-22.9068, -43.1729], 'são paulo|brazil': [-23.5558, -46.6396],
+  'sao paulo|brazil': [-23.5558, -46.6396], 'salvador|brazil': [-12.9714, -38.5014],
+  // Colombia
+  'medellín|colombia': [6.2476, -75.5658], 'medellin|colombia': [6.2476, -75.5658],
+  'bogotá|colombia': [4.7110, -74.0721], 'bogota|colombia': [4.7110, -74.0721],
+  'cartagena|colombia': [10.3997, -75.5144],
+  // Ecuador, Peru, Bolivia, Uruguay
+  'quito|ecuador': [-0.1807, -78.4678], 'cuenca|ecuador': [-2.9001, -79.0059],
+  'lima|peru': [-12.0464, -77.0428], 'cusco|peru': [-13.5320, -71.9675],
+  'la paz|bolivia': [-16.4897, -68.1193], 'montevideo|uruguay': [-34.9011, -56.1645],
+  // Asia
+  'bangkok|thailand': [13.7563, 100.5018], 'chiang mai|thailand': [18.7883, 98.9853],
+  'bali|indonesia': [-8.4095, 115.1889], 'ubud|indonesia': [-8.5069, 115.2625],
+  'canggu|indonesia': [-8.6478, 115.1385], 'kuala lumpur|malaysia': [3.1390, 101.6869],
+  'singapore|singapore': [1.3521, 103.8198], 'taipei|taiwan': [25.0330, 121.5654],
+  'tokyo|japan': [35.6762, 139.6503], 'kyoto|japan': [35.0116, 135.7681],
+  'seoul|south korea': [37.5665, 126.9780], 'hanoi|vietnam': [21.0285, 105.8542],
+  'ho chi minh city|vietnam': [10.8231, 106.6297], 'da nang|vietnam': [16.0544, 108.2022],
+  // Africa / Middle East
+  'cape town|south africa': [-33.9249, 18.4241], 'cairo|egypt': [30.0444, 31.2357],
+  'dubai|uae': [25.2048, 55.2708], 'tel aviv|israel': [32.0853, 34.7818],
+  // Europe (other)
+  'berlin|germany': [52.5200, 13.4050], 'paris|france': [48.8566, 2.3522],
+  'rome|italy': [41.9028, 12.4964], 'amsterdam|netherlands': [52.3676, 4.9041],
+  'prague|czech republic': [50.0755, 14.4378], 'budapest|hungary': [47.4979, 19.0402],
+  'vienna|austria': [48.2082, 16.3738], 'athens|greece': [37.9838, 23.7275],
+  'london|united kingdom': [51.5074, -0.1278], 'dublin|ireland': [53.3498, -6.2603],
+  'split|croatia': [43.5081, 16.4402], 'dubrovnik|croatia': [42.6507, 18.0944],
+  'zagreb|croatia': [45.8150, 15.9819], 'belgrade|serbia': [44.7866, 20.4489],
+  'sofia|bulgaria': [42.6977, 23.3219], 'bucharest|romania': [44.4268, 26.1025],
+  'kotor|montenegro': [42.4247, 18.7712],
+  // North America
+  'new york|united states': [40.7128, -74.0060], 'los angeles|united states': [34.0522, -118.2437],
+  'miami|united states': [25.7617, -80.1918], 'atlanta|united states': [33.7490, -84.3880],
+  'austin|united states': [30.2672, -97.7431], 'denver|united states': [39.7392, -104.9903],
+  'naples|united states': [26.1420, -81.7948], 'las vegas|united states': [36.1699, -115.1398],
+  'orlando|united states': [28.5383, -81.3792], 'tampa|united states': [27.9506, -82.4572],
+  'san francisco|united states': [37.7749, -122.4194], 'chicago|united states': [41.8781, -87.6298],
+  'west palm beach|united states': [26.7153, -80.0534],
+  'toronto|canada': [43.6532, -79.3832], 'vancouver|canada': [49.2827, -123.1207],
+  'montreal|canada': [45.5017, -73.5673], 'mexico city|mexico': [19.4326, -99.1332]
+};
+
+function lookupCity(name, country) {
+  if (!name) return null;
+  const k = (name.trim() + '|' + (country || '').trim()).toLowerCase();
+  if (CITY_COORDS[k]) return { lat: CITY_COORDS[k][0], lng: CITY_COORDS[k][1] };
+  // Try name alone (any country) as a last resort
+  const justName = name.trim().toLowerCase() + '|';
+  for (const key of Object.keys(CITY_COORDS)) {
+    if (key.startsWith(justName)) return { lat: CITY_COORDS[key][0], lng: CITY_COORDS[key][1] };
+  }
+  return null;
+}
+
+const DEFAULT_PROFILE = `## What I look for
+- Easy local culture; nomad/tourist-friendly but NOT overrun with Americans (expat OK)
+- Plenty to do plus chill time; beach a plus
+- Walkable; airport for entry/exit, train ideal in-city, bus tertiary
+- Affordable lodging and daily living
+- Climate target: 22–27°C, OK with cooler mornings; not cold, not 30°C+ humid
+- Cultural attractions; ideally somewhere new
+- Coworking access (WeWork or comparable); 50+ Mbps wifi non-negotiable
+- Easy US-passport visa entry; English + decent Spanish
+
+## How I travel
+- 1–3 months per destination
+- US base: Florida domicile, car/storage in Atlanta
+- Pursuing FEIE qualification (330+ days outside US per rolling 12 months)
+- Tracking Schengen 90/180 carefully
+- Astrocartography input where relevant
+
+## Working style abroad
+- Real desk + reliable wifi (50+ Mbps down, 10+ up minimum)
+- Coworking 2–3 days/week, apartment work other days
+- Webinars/video calls require quiet, stable connection
+- Lead two companies — need professional environment
+
+## What I avoid
+- Heavily Americanized tourist zones
+- Cold weather
+- State Dept Level 3+ advisories
+- Visa-hostile destinations`;
+
+// ==================== STATE ====================
+
+function newId() { return 'i_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8); }
+
+function defaultState() {
+  return {
+    cities: [],
+    ideas: [],
+    profile: DEFAULT_PROFILE,
+    aiMode: 'copy',
+    apiKey: '',
+    ideaFilter: 'all',
+    pastOpen: false,
+    lastSession: ''
+  };
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultState();
+    const parsed = JSON.parse(raw);
+    const def = defaultState();
+    return Object.assign(def, parsed);
+  } catch(e) {
+    console.error('Load failed', e);
+    return defaultState();
+  }
+}
+
+let state = loadState();
+
+function saveState() {
+  state.lastSession = new Date().toISOString();
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  maybeSnapshot();
+  showSaved();
+  updateHero();
+}
+
+// Snapshot history: keep last N versions in localStorage, taken at most once per interval.
+// Provides recovery from bad imports, accidental resets, or corrupted state.
+let _lastSnapshotAt = 0;
+function maybeSnapshot() {
+  const now = Date.now();
+  if (now - _lastSnapshotAt < SNAPSHOT_INTERVAL_MS) return;
+  _lastSnapshotAt = now;
+  try {
+    let snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
+    snaps.unshift({ ts: new Date().toISOString(), data: state });
+    snaps = snaps.slice(0, MAX_SNAPSHOTS);
+    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps));
+  } catch(e) {
+    console.warn('Snapshot save failed', e);
+  }
+}
+
+function loadSnapshots() {
+  try {
+    return JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
+  } catch(e) {
+    return [];
+  }
+}
+
+function restoreSnapshot(ts) {
+  const snaps = loadSnapshots();
+  const snap = snaps.find(s => s.ts === ts);
+  if (!snap) { toast('Snapshot not found.', 'error'); return; }
+  if (armConfirm('restoreSnap:' + ts, 'Click "Restore" again to replace current data with this snapshot.')) return;
+  state = Object.assign(defaultState(), snap.data);
+  openCityIds = new Set();
+  saveState();
+  renderAll();
+  toast('Restored snapshot from ' + new Date(ts).toLocaleString(), 'ok');
+}
+
+const savedEl = document.getElementById('saved');
+let saveTimer;
+function showSaved() {
+  savedEl.classList.add('show');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => savedEl.classList.remove('show'), 1000);
+}
+
+// ==================== HELPERS ====================
+
+function todayISO() {
+  const d = new Date();
+  return d.toISOString().slice(0, 10);
+}
+
+function parseDate(s) {
+  if (!s) return null;
+  // Parse YYYY-MM-DD as local date to avoid timezone shenanigans
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function fmtDate(s) {
+  if (!s) return '—';
+  const d = parseDate(s);
+  if (!d) return '—';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function fmtDateShort(s) {
+  if (!s) return '—';
+  const d = parseDate(s);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function nightsBetween(checkInStr, checkOutStr) {
+  if (!checkInStr || !checkOutStr) return 0;
+  const a = parseDate(checkInStr);
+  const b = parseDate(checkOutStr);
+  if (!a || !b) return 0;
+  return Math.max(0, Math.round((b - a) / 86400000));
+}
+
+function isSchengen(country) {
+  return SCHENGEN_COUNTRIES.includes(country);
+}
+
+function isUS(country) {
+  return country === 'United States' || country === 'USA' || country === 'US';
+}
+
+function fmtCurrency(amount, currency) {
+  if (amount == null || amount === '') return '—';
+  const cur = currency || 'USD';
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(amount);
+  } catch(e) {
+    return cur + ' ' + amount;
+  }
+}
+
+// Sorted cities by check-in (cities without dates go to end)
+function sortedCities() {
+  const arr = state.cities.slice();
+  arr.sort((a, b) => {
+    if (!a.checkIn && !b.checkIn) return 0;
+    if (!a.checkIn) return 1;
+    if (!b.checkIn) return -1;
+    return a.checkIn.localeCompare(b.checkIn);
+  });
+  return arr;
+}
+
+// ==================== DAY MATH ====================
+
+// For a city, return ALL stay periods. Cities can have multiple accommodations
+// that span different sub-ranges. If accommodations exist with dates, those define
+// the actual presence in the city. If not, use city-level dates.
+// For day-counting purposes, we use the city-level checkIn/checkOut as authoritative
+// presence in country, because nights between accommodations still happen somewhere
+// in that country. Gaps WITHIN a city are warned but counted as in-country.
+function cityNights(city) {
+  return nightsBetween(city.checkIn, city.checkOut);
+}
+
+// Per-country totals
+function countryDayMap() {
+  const map = {};
+  state.cities.forEach(c => {
+    if (!c.country || !c.checkIn || !c.checkOut) return;
+    map[c.country] = (map[c.country] || 0) + cityNights(c);
+  });
+  return map;
+}
+
+// Per-US-state totals
+function stateDayMap() {
+  const map = {};
+  state.cities.forEach(c => {
+    if (!isUS(c.country) || !c.state || !c.checkIn || !c.checkOut) return;
+    map[c.state] = (map[c.state] || 0) + cityNights(c);
+  });
+  return map;
+}
+
+// Schengen rolling 90/180: for any given reference date, how many days in the prior 180 (inclusive) were Schengen?
+function schengenDaysUsedAt(refDateStr) {
+  const ref = parseDate(refDateStr);
+  if (!ref) return 0;
+  const winStart = new Date(ref);
+  winStart.setDate(winStart.getDate() - 179);
+  let days = 0;
+  state.cities.forEach(c => {
+    if (!isSchengen(c.country) || !c.checkIn || !c.checkOut) return;
+    const cIn = parseDate(c.checkIn);
+    const cOut = parseDate(c.checkOut);
+    if (!cIn || !cOut) return;
+    // count nights inside the window (each night = the date you spent there)
+    // We treat presence as [checkIn, checkOut - 1 night], because checkOut day you've left.
+    // Schengen counts every calendar day you're physically present, so for nightly
+    // accounting we count overlap days between [checkIn, checkOut-1day] and [winStart, ref].
+    const lastNightDate = new Date(cOut);
+    lastNightDate.setDate(lastNightDate.getDate() - 1);
+    const overlapStart = cIn > winStart ? cIn : winStart;
+    const overlapEnd = lastNightDate < ref ? lastNightDate : ref;
+    if (overlapEnd >= overlapStart) {
+      const overlap = Math.round((overlapEnd - overlapStart) / 86400000) + 1;
+      days += overlap;
+    }
+  });
+  return days;
+}
+
+// Peak Schengen usage across the planned itinerary (worst point ahead)
+function peakSchengenAhead() {
+  const cities = state.cities.filter(c => isSchengen(c.country) && c.checkIn && c.checkOut);
+  if (cities.length === 0) return { days: 0, date: null };
+  let peak = { days: 0, date: null };
+  cities.forEach(c => {
+    const lastNight = new Date(parseDate(c.checkOut));
+    lastNight.setDate(lastNight.getDate() - 1);
+    const dStr = lastNight.toISOString().slice(0,10);
+    const d = schengenDaysUsedAt(dStr);
+    if (d > peak.days) peak = { days: d, date: dStr };
+  });
+  return peak;
+}
+
+// ==================== GAP / OVERLAP DETECTION ====================
+
+function detectIssues() {
+  const issues = []; // {cityId, type, message, severity}
+  const cities = sortedCities();
+  for (let i = 0; i < cities.length - 1; i++) {
+    const a = cities[i];
+    const b = cities[i+1];
+    if (!a.checkOut || !b.checkIn) continue;
+    const aOut = parseDate(a.checkOut);
+    const bIn = parseDate(b.checkIn);
+    const gap = Math.round((bIn - aOut) / 86400000);
+    if (gap < 0) {
+      issues.push({
+        cityIds: [a.id, b.id],
+        type: 'overlap',
+        severity: 'alert',
+        message: `Overlap: leaving ${a.name} ${fmtDateShort(a.checkOut)} but already in ${b.name} ${fmtDateShort(b.checkIn)} (${Math.abs(gap)} day${Math.abs(gap)===1?'':'s'} double-booked).`
+      });
+    } else if (gap > 0) {
+      issues.push({
+        cityIds: [a.id, b.id],
+        type: 'gap',
+        severity: gap >= 2 ? 'alert' : 'warn',
+        message: `Gap: ${gap} night${gap===1?'':'s'} between leaving ${a.name} (${fmtDateShort(a.checkOut)}) and ${b.name} (${fmtDateShort(b.checkIn)}). Where are you sleeping?`
+      });
+    }
+  }
+
+  // Also check accommodations within each city
+  state.cities.forEach(c => {
+    if (!c.accommodations || c.accommodations.length < 2) return;
+    const accs = c.accommodations.filter(a => a.checkIn && a.checkOut && (a.status === 'booked'))
+      .sort((a,b) => a.checkIn.localeCompare(b.checkIn));
+    for (let i = 0; i < accs.length - 1; i++) {
+      const aOut = parseDate(accs[i].checkOut);
+      const bIn = parseDate(accs[i+1].checkIn);
+      const gap = Math.round((bIn - aOut) / 86400000);
+      if (gap < 0) {
+        issues.push({
+          cityIds: [c.id],
+          type: 'accom-overlap',
+          severity: 'warn',
+          message: `In ${c.name}: ${accs[i].name||'an accommodation'} and ${accs[i+1].name||'another'} overlap by ${Math.abs(gap)} day${Math.abs(gap)===1?'':'s'}.`
+        });
+      } else if (gap > 0) {
+        issues.push({
+          cityIds: [c.id],
+          type: 'accom-gap',
+          severity: 'alert',
+          message: `In ${c.name}: ${gap} night${gap===1?'':'s'} between ${accs[i].name||'accommodation'} (out ${fmtDateShort(accs[i].checkOut)}) and ${accs[i+1].name||'next'} (in ${fmtDateShort(accs[i+1].checkIn)}).`
+        });
+      }
+    }
+  });
+
+  return issues;
+}
+
+// ==================== POPULATE SELECTS ====================
+
+function populateCountries() {
+  ['add-city-country','add-idea-country'].forEach(id => {
+    const sel = document.getElementById(id);
+    sel.innerHTML = '<option value="">Country</option>';
+    ALL_COUNTRIES.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+// ==================== HERO ====================
+
+function updateHero() {
+  const now = new Date();
+  document.getElementById('hero-date').textContent = now.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+  });
+  document.getElementById('hero-last').textContent = 'LAST TOUCHED ' + (state.lastSession
+    ? new Date(state.lastSession).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' })
+    : '—');
+}
+
+// ==================== NOW & NEXT ====================
+
+function renderNow() {
+  const container = document.getElementById('now-now');
+  const meta = document.getElementById('now-meta');
+  const todayStr = todayISO();
+  const cities = sortedCities();
+  let current = null, next = null;
+  for (const c of cities) {
+    if (!c.checkIn || !c.checkOut) continue;
+    if (c.checkIn <= todayStr && c.checkOut > todayStr) {
+      current = c;
+    } else if (c.checkIn > todayStr) {
+      if (!next || c.checkIn < next.checkIn) next = c;
+    }
+  }
+  if (!current && !next) {
+    container.innerHTML = '<div class="now-empty">Nothing planned yet. Add a city below to start.</div>';
+    meta.textContent = '—';
+  } else if (current && next) {
+    const daysUntilLeaving = Math.round((parseDate(current.checkOut) - parseDate(todayStr)) / 86400000);
+    container.innerHTML = `
+      <div class="now-card">
+        <div class="now-block">
+          <div class="label">Now</div>
+          <div class="place">${escapeHTML(current.name)}, ${escapeHTML(current.country||'—')}</div>
+          <div class="dates">${fmtDate(current.checkIn)} → ${fmtDate(current.checkOut)} · ${daysUntilLeaving} day${daysUntilLeaving===1?'':'s'} left</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="next-block">
+          <div class="label">Next</div>
+          <div class="place">${escapeHTML(next.name)}, ${escapeHTML(next.country||'—')}</div>
+          <div class="dates">${fmtDate(next.checkIn)} → ${fmtDate(next.checkOut)}</div>
+        </div>
+      </div>`;
+    meta.textContent = `${daysUntilLeaving}d until move`;
+  } else if (current) {
+    const daysUntilLeaving = Math.round((parseDate(current.checkOut) - parseDate(todayStr)) / 86400000);
+    container.innerHTML = `
+      <div class="now-card">
+        <div class="now-block">
+          <div class="label">Now</div>
+          <div class="place">${escapeHTML(current.name)}, ${escapeHTML(current.country||'—')}</div>
+          <div class="dates">${fmtDate(current.checkIn)} → ${fmtDate(current.checkOut)} · ${daysUntilLeaving} day${daysUntilLeaving===1?'':'s'} left</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="next-block">
+          <div class="label">Next</div>
+          <div class="place" style="color:var(--text-3);font-style:italic">Nothing planned</div>
+          <div class="dates">&nbsp;</div>
+        </div>
+      </div>`;
+    meta.textContent = 'no next leg';
+  } else if (next) {
+    const daysUntil = Math.round((parseDate(next.checkIn) - parseDate(todayStr)) / 86400000);
+    container.innerHTML = `
+      <div class="now-card">
+        <div class="now-block">
+          <div class="label">Currently</div>
+          <div class="place" style="color:var(--text-3);font-style:italic">Between stays</div>
+          <div class="dates">&nbsp;</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="next-block">
+          <div class="label">Next up</div>
+          <div class="place">${escapeHTML(next.name)}, ${escapeHTML(next.country||'—')}</div>
+          <div class="dates">${fmtDate(next.checkIn)} · in ${daysUntil} day${daysUntil===1?'':'s'}</div>
+        </div>
+      </div>`;
+    meta.textContent = `${daysUntil}d until ${next.name}`;
+  }
+
+  // Issues
+  const warnings = document.getElementById('now-warnings');
+  warnings.innerHTML = '';
+  const issues = detectIssues();
+  issues.forEach(iss => {
+    const w = document.createElement('div');
+    w.className = 'warning' + (iss.severity === 'alert' ? ' alert' : '');
+    w.innerHTML = `<span class="icon">${iss.severity === 'alert' ? '⚠' : '⚠'}</span><span>${escapeHTML(iss.message)}</span>`;
+    warnings.appendChild(w);
+  });
+}
+
+// ==================== COUNTERS ====================
+
+function renderCounters() {
+  const container = document.getElementById('counters');
+  container.innerHTML = '';
+
+  // Schengen now
+  const todayStr = todayISO();
+  const schNow = schengenDaysUsedAt(todayStr);
+  const peak = peakSchengenAhead();
+
+  const schCard = document.createElement('div');
+  schCard.className = 'counter-card';
+  let schClass = 'ok';
+  if (schNow >= 75 || peak.days >= 85) schClass = 'alert';
+  else if (schNow >= 60 || peak.days >= 70) schClass = 'warn';
+  schCard.innerHTML = `
+    <div class="counter-label">Schengen 90/180 (today)</div>
+    <div class="counter-value ${schClass}">${schNow} <span style="font-size:18px;color:var(--text-3)">/ 90</span></div>
+    <div class="counter-sub">${90 - schNow} days remaining today${peak.date ? ` · peak ahead: ${peak.days} on ${fmtDateShort(peak.date)}` : ''}</div>
+  `;
+  container.appendChild(schCard);
+
+  // Total cost
+  let totalCost = 0;
+  state.cities.forEach(c => {
+    if (c.estimatedCost) totalCost += Number(c.estimatedCost) || 0;
+    if (c.accommodations) {
+      c.accommodations.forEach(a => {
+        if (a.cost && (a.status === 'booked' || !a.status)) totalCost += Number(a.cost) || 0;
+      });
+    }
+  });
+  const costCard = document.createElement('div');
+  costCard.className = 'counter-card';
+  costCard.innerHTML = `
+    <div class="counter-label">Estimated total cost</div>
+    <div class="counter-value">${fmtCurrency(totalCost,'USD')}</div>
+    <div class="counter-sub">Sum of city estimates + booked accommodations</div>
+  `;
+  container.appendChild(costCard);
+
+  // Days by country (top 5)
+  const countryMap = countryDayMap();
+  const topCountries = Object.entries(countryMap).sort((a,b) => b[1] - a[1]).slice(0, 6);
+  const countriesTotal = Object.values(countryMap).reduce((a,b)=>a+b,0);
+  const countryCard = document.createElement('div');
+  countryCard.className = 'counter-card';
+  countryCard.innerHTML = `
+    <div class="counter-label">Days by country</div>
+    <div class="counter-value">${Object.keys(countryMap).length}</div>
+    <div class="counter-sub">${countriesTotal} planned nights total</div>
+    <div class="counter-breakdown">
+      ${topCountries.map(([k,v]) => `<div class="item"><span class="name">${escapeHTML(k)}</span><span class="num">${v}d</span></div>`).join('')}
+    </div>
+  `;
+  container.appendChild(countryCard);
+
+  // US days by state
+  const stateMap = stateDayMap();
+  const topStates = Object.entries(stateMap).sort((a,b) => b[1] - a[1]).slice(0, 8);
+  const usTotal = Object.values(stateMap).reduce((a,b)=>a+b,0);
+  const stateCard = document.createElement('div');
+  stateCard.className = 'counter-card';
+  let usClass = 'ok';
+  if (usTotal > 32) usClass = 'alert';
+  else if (usTotal > 25) usClass = 'warn';
+  stateCard.innerHTML = `
+    <div class="counter-label">US days (rolling, by state)</div>
+    <div class="counter-value ${usClass}">${usTotal} <span style="font-size:18px;color:var(--text-3)">/ 35*</span></div>
+    <div class="counter-sub">* FEIE physical presence: max 35 US days per rolling 12 months</div>
+    <div class="counter-breakdown">
+      ${topStates.map(([k,v]) => `<div class="item"><span class="name">${escapeHTML(k)}</span><span class="num">${v}d</span></div>`).join('')}
+    </div>
+  `;
+  container.appendChild(stateCard);
+}
+
+// ==================== ITINERARY ====================
+
+let openCityIds = new Set();
+
+function renderCities() {
+  const container = document.getElementById('city-list');
+  const meta = document.getElementById('itinerary-meta');
+  container.innerHTML = '';
+  const cities = sortedCities();
+  meta.textContent = cities.length + ' cit' + (cities.length === 1 ? 'y' : 'ies');
+
+  if (cities.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'now-empty';
+    empty.textContent = 'No cities yet. Add one above to begin building your itinerary.';
+    container.appendChild(empty);
+    return;
+  }
+
+  const issues = detectIssues();
+  const issueCityIds = new Set(issues.flatMap(i => i.cityIds));
+  const alertCityIds = new Set(issues.filter(i => i.severity === 'alert').flatMap(i => i.cityIds));
+  const todayStr = todayISO();
+
+  // Split into past / current+future
+  const past = [];
+  const active = [];
+  cities.forEach(c => {
+    if (c.checkOut && c.checkOut < todayStr) past.push(c);
+    else active.push(c);
+  });
+
+  // Render active (current + future) first
+  active.forEach(city => container.appendChild(
+    renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), false)
+  ));
+
+  // Render past section, collapsed by default
+  if (past.length > 0) {
+    const pastSection = document.createElement('div');
+    pastSection.className = 'past-section' + (state.pastOpen ? ' open' : '');
+
+    const toggle = document.createElement('div');
+    toggle.className = 'past-toggle';
+    const nights = past.reduce((sum, c) => sum + cityNights(c), 0);
+    toggle.innerHTML = `
+      <div>
+        <h3>Past travel</h3>
+        <div class="meta">Still counted in day totals</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="meta">${past.length} cit${past.length===1?'y':'ies'} · ${nights} nights</div>
+        <span class="chev">▶</span>
+      </div>
+    `;
+    toggle.onclick = () => {
+      state.pastOpen = !state.pastOpen;
+      saveState();
+      renderCities();
+    };
+    pastSection.appendChild(toggle);
+
+    const list = document.createElement('div');
+    list.className = 'past-list';
+    past.reverse().forEach(city => list.appendChild(
+      renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), true)
+    ));
+    pastSection.appendChild(list);
+
+    container.appendChild(pastSection);
+  }
+}
+
+function renderCityCard(city, hasIssue, hasAlert, isPast) {
+  const node = document.createElement('div');
+  node.className = 'city' + (openCityIds.has(city.id) ? ' open' : '') + (hasAlert ? ' has-alert' : (hasIssue ? ' has-issue' : '')) + (isPast ? ' past' : '');
+  const capturedId = city.id;
+
+  const nights = cityNights(city);
+  const accomCount = (city.accommodations || []).length;
+  const accomBooked = (city.accommodations || []).filter(a => a.status === 'booked').length;
+  let cityCost = 0;
+  if (city.estimatedCost) cityCost += Number(city.estimatedCost) || 0;
+  (city.accommodations||[]).forEach(a => { if (a.cost && (a.status === 'booked' || !a.status)) cityCost += Number(a.cost) || 0; });
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'city-header';
+  header.innerHTML = `
+    <div>
+      <div class="city-title-row">
+        <span class="city-name">${escapeHTML(city.name || '(unnamed)')}</span>
+        <span class="city-country">${escapeHTML(city.country || '—')}${isSchengen(city.country) ? ' · Schengen' : ''}</span>
+      </div>
+      <div class="city-dates">${fmtDate(city.checkIn)} → ${fmtDate(city.checkOut)} · ${nights} night${nights===1?'':'s'}</div>
+    </div>
+    <div class="city-stats">
+      <div class="stat"><span class="num">${nights}</span> nights</div>
+      <div class="stat"><span class="num">${accomBooked}/${accomCount}</span> booked</div>
+      <div class="stat"><span class="num">${fmtCurrency(cityCost,'USD')}</span></div>
+    </div>
+    <div class="city-chev">▶</div>
+  `;
+  header.onclick = (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA') return;
+    if (openCityIds.has(capturedId)) openCityIds.delete(capturedId);
+    else openCityIds.add(capturedId);
+    renderCities();
+  };
+  node.appendChild(header);
+
+  // Body
+  const body = document.createElement('div');
+  body.className = 'city-body';
+
+  // Editable fields
+  body.appendChild(buildCityFields(city));
+  body.appendChild(buildCityNotes(city));
+  body.appendChild(buildLatLngRow(city));
+  body.appendChild(buildAccommodations(city));
+  body.appendChild(buildCitySubsections(city));
+
+  // Delete button
+  const footer = document.createElement('div');
+  footer.style.marginTop = '20px';
+  footer.style.paddingTop = '12px';
+  footer.style.borderTop = '1px solid var(--border-light)';
+  footer.innerHTML = '<button class="btn-secondary danger" onclick="deleteCity(\''+capturedId+'\')">Delete this city</button>';
+  body.appendChild(footer);
+
+  node.appendChild(body);
+  return node;
+}
+
+function buildCityFields(city) {
+  const div = document.createElement('div');
+  div.className = 'city-fields';
+  const capturedId = city.id;
+
+  // Name
+  div.appendChild(makeField('City name', 'text', city.name || '', v => updateCity(capturedId, 'name', v)));
+  // Country
+  const countryLabel = document.createElement('div');
+  countryLabel.innerHTML = '<span class="field-label">Country</span>';
+  const countrySel = document.createElement('select');
+  countrySel.className = 'field-input';
+  countrySel.innerHTML = '<option value="">—</option>' + ALL_COUNTRIES.map(c =>
+    `<option value="${escapeHTML(c)}" ${c === city.country ? 'selected' : ''}>${escapeHTML(c)}</option>`
+  ).join('');
+  countrySel.onchange = () => updateCity(capturedId, 'country', countrySel.value);
+  countryLabel.appendChild(countrySel);
+  div.appendChild(countryLabel);
+
+  // State (only if US)
+  if (isUS(city.country)) {
+    const stateLabel = document.createElement('div');
+    stateLabel.innerHTML = '<span class="field-label">US State</span>';
+    const stateSel = document.createElement('select');
+    stateSel.className = 'field-input';
+    stateSel.innerHTML = '<option value="">—</option>' + US_STATES.map(s =>
+      `<option value="${s}" ${s === city.state ? 'selected' : ''}>${s}</option>`
+    ).join('');
+    stateSel.onchange = () => updateCity(capturedId, 'state', stateSel.value);
+    stateLabel.appendChild(stateSel);
+    div.appendChild(stateLabel);
+  } else {
+    // Status field
+    const statusLabel = document.createElement('div');
+    statusLabel.innerHTML = '<span class="field-label">Status</span>';
+    const sel = document.createElement('select');
+    sel.className = 'field-input';
+    ['tentative','shortlisted','booked'].forEach(s => {
+      const o = document.createElement('option');
+      o.value = s; o.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+      if (s === (city.status || 'tentative')) o.selected = true;
+      sel.appendChild(o);
+    });
+    sel.onchange = () => updateCity(capturedId, 'status', sel.value);
+    statusLabel.appendChild(sel);
+    div.appendChild(statusLabel);
+  }
+
+  // Check-in
+  div.appendChild(makeField('Check-in', 'date', city.checkIn || '', v => updateCity(capturedId, 'checkIn', v)));
+  // Check-out
+  div.appendChild(makeField('Check-out', 'date', city.checkOut || '', v => updateCity(capturedId, 'checkOut', v)));
+  // Estimated cost
+  div.appendChild(makeField('Est. cost (USD)', 'number', city.estimatedCost || '', v => updateCity(capturedId, 'estimatedCost', v)));
+
+  return div;
+}
+
+function makeField(label, type, value, onChange) {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<span class="field-label">' + escapeHTML(label) + '</span>';
+  const input = document.createElement('input');
+  input.type = type;
+  input.className = 'field-input';
+  input.value = value;
+  input.placeholder = type === 'date' ? 'YYYY-MM-DD' : '';
+  input.addEventListener('change', () => onChange(input.value));
+  input.addEventListener('blur', () => onChange(input.value));
+  wrap.appendChild(input);
+  return wrap;
+}
+
+function buildCityNotes(city) {
+  const wrap = document.createElement('div');
+  wrap.className = 'city-notes-block';
+  wrap.innerHTML = '<span class="field-label">Notes & first impressions</span>';
+  const ta = document.createElement('textarea');
+  ta.className = 'notes-area';
+  ta.placeholder = 'Climate window, must-do, things to research…';
+  ta.value = city.notes || '';
+  const capturedId = city.id;
+  ta.addEventListener('blur', () => updateCity(capturedId, 'notes', ta.value));
+  wrap.appendChild(ta);
+  return wrap;
+}
+
+// Accommodations
+function buildAccommodations(city) {
+  const wrap = document.createElement('div');
+  wrap.className = 'accom-section';
+  const capturedId = city.id;
+  wrap.innerHTML = '<h3>Accommodations <button class="btn-secondary" onclick="addAccommodation(\''+capturedId+'\')">+ Add</button></h3>';
+
+  const list = document.createElement('div');
+  list.className = 'accom-list';
+  (city.accommodations || []).forEach(acc => list.appendChild(buildAccommodation(city, acc)));
+  if (!city.accommodations || city.accommodations.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'sub-empty';
+    empty.textContent = 'No accommodations yet. Add one to compare options.';
+    list.appendChild(empty);
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function buildAccommodation(city, acc) {
+  const item = document.createElement('div');
+  item.className = 'accom-item';
+  const cityId = city.id;
+  const accId = acc.id;
+
+  // Row 1: name, link, status, delete
+  const row1 = document.createElement('div');
+  row1.className = 'accom-row1';
+
+  const nameWrap = document.createElement('div');
+  const name = document.createElement('div');
+  name.className = 'accom-name';
+  name.contentEditable = 'true';
+  name.textContent = acc.name || '';
+  name.dataset.placeholder = 'Property name';
+  if (!acc.name) name.style.color = 'var(--text-3)';
+  name.addEventListener('focus', () => name.style.color = '');
+  name.addEventListener('blur', () => {
+    const v = name.textContent.trim();
+    updateAccom(cityId, accId, 'name', v);
+  });
+  nameWrap.appendChild(name);
+
+  const linkRow = document.createElement('div');
+  linkRow.style.fontSize = '12px';
+  linkRow.style.marginTop = '2px';
+  const linkSpan = document.createElement('span');
+  linkSpan.className = 'accom-link';
+  linkSpan.contentEditable = 'true';
+  linkSpan.textContent = acc.link || '';
+  linkSpan.dataset.placeholder = 'https://…';
+  if (!acc.link) linkSpan.style.color = 'var(--text-3)';
+  linkSpan.addEventListener('focus', () => linkSpan.style.color = '');
+  linkSpan.addEventListener('blur', () => {
+    const v = linkSpan.textContent.trim();
+    updateAccom(cityId, accId, 'link', v);
+  });
+  linkRow.appendChild(linkSpan);
+  if (acc.link) {
+    const open = document.createElement('a');
+    open.href = acc.link; open.target = '_blank'; open.rel = 'noopener';
+    open.textContent = ' ↗'; open.style.color = 'var(--accent)'; open.style.textDecoration = 'none';
+    linkRow.appendChild(open);
+  }
+  nameWrap.appendChild(linkRow);
+  row1.appendChild(nameWrap);
+
+  // Status pill / select
+  const statusSel = document.createElement('select');
+  statusSel.className = 'accom-mini-field';
+  ['considering','shortlisted','booked','rejected'].forEach(s => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+    if (s === (acc.status || 'considering')) o.selected = true;
+    statusSel.appendChild(o);
+  });
+  statusSel.onchange = () => updateAccom(cityId, accId, 'status', statusSel.value);
+  row1.appendChild(statusSel);
+
+  const del = document.createElement('button');
+  del.className = 'icon-btn delete';
+  del.textContent = '✕';
+  del.title = 'Remove';
+  del.onclick = () => removeAccom(cityId, accId);
+  row1.appendChild(del);
+
+  item.appendChild(row1);
+
+  // Row 2: neighborhood, check-in, check-out, cost, currency
+  const row2 = document.createElement('div');
+  row2.className = 'accom-row2';
+
+  const nb = document.createElement('input');
+  nb.className = 'accom-mini-field';
+  nb.placeholder = 'Neighborhood';
+  nb.value = acc.neighborhood || '';
+  nb.onblur = () => updateAccom(cityId, accId, 'neighborhood', nb.value);
+  row2.appendChild(nb);
+
+  const inD = document.createElement('input');
+  inD.type = 'date'; inD.className = 'accom-mini-field';
+  inD.title = 'Check-in';
+  inD.value = acc.checkIn || '';
+  inD.onchange = () => updateAccom(cityId, accId, 'checkIn', inD.value);
+  row2.appendChild(inD);
+
+  const outD = document.createElement('input');
+  outD.type = 'date'; outD.className = 'accom-mini-field';
+  outD.title = 'Check-out';
+  outD.value = acc.checkOut || '';
+  outD.onchange = () => updateAccom(cityId, accId, 'checkOut', outD.value);
+  row2.appendChild(outD);
+
+  const cost = document.createElement('input');
+  cost.type = 'number'; cost.className = 'accom-mini-field';
+  cost.placeholder = 'Cost';
+  cost.value = acc.cost || '';
+  cost.onblur = () => updateAccom(cityId, accId, 'cost', cost.value);
+  row2.appendChild(cost);
+
+  const cur = document.createElement('select');
+  cur.className = 'accom-mini-field';
+  ['USD','EUR','GBP','MXN','CRC','BRL','ARS','TRY','GEL','MAD'].forEach(c => {
+    const o = document.createElement('option');
+    o.value = c; o.textContent = c;
+    if (c === (acc.currency || 'USD')) o.selected = true;
+    cur.appendChild(o);
+  });
+  cur.onchange = () => updateAccom(cityId, accId, 'currency', cur.value);
+  row2.appendChild(cur);
+
+  item.appendChild(row2);
+
+  // Notes
+  const notes = document.createElement('textarea');
+  notes.className = 'notes-area';
+  notes.style.marginTop = '8px';
+  notes.style.minHeight = '40px';
+  notes.placeholder = 'Notes — pros, cons, host responses…';
+  notes.value = acc.notes || '';
+  notes.onblur = () => updateAccom(cityId, accId, 'notes', notes.value);
+  item.appendChild(notes);
+
+  // Actions
+  const actions = document.createElement('div');
+  actions.className = 'accom-actions';
+  const aiBtn = document.createElement('button');
+  aiBtn.className = 'btn-secondary';
+  aiBtn.textContent = '🧠 Assess with AI';
+  aiBtn.onclick = () => openAccomAssessment(city, acc);
+  actions.appendChild(aiBtn);
+
+  const nights = nightsBetween(acc.checkIn, acc.checkOut);
+  if (nights > 0) {
+    const stat = document.createElement('span');
+    stat.style.fontSize = '12px';
+    stat.style.color = 'var(--text-3)';
+    stat.style.fontFamily = "'JetBrains Mono', monospace";
+    stat.textContent = `${nights} night${nights===1?'':'s'} · ${fmtCurrency(acc.cost, acc.currency||'USD')}` +
+      (acc.cost && nights ? ` (${fmtCurrency(Math.round((acc.cost||0)/nights), acc.currency||'USD')}/night)` : '');
+    actions.appendChild(stat);
+  }
+  item.appendChild(actions);
+
+  return item;
+}
+
+// Subsections (neighborhoods, attractions, restaurants, day trips, coworking, friends)
+function buildCitySubsections(city) {
+  const wrap = document.createElement('div');
+  wrap.className = 'city-subsections';
+
+  const subs = [
+    { key: 'neighborhoods', title: 'Neighborhoods of interest', placeholder: 'Neighborhood name', metaPlaceholder: 'Notes: vibe, walkability…' },
+    { key: 'attractions', title: 'Attractions / must-do', placeholder: 'Attraction', metaPlaceholder: 'Notes: hours, tips…' },
+    { key: 'restaurants', title: 'Restaurants', placeholder: 'Restaurant', metaPlaceholder: 'Notes: dish, neighborhood…' },
+    { key: 'dayTrips', title: 'Day trips', placeholder: 'Destination', metaPlaceholder: 'Notes: how to get there…' },
+    { key: 'coworking', title: 'Coworking', placeholder: 'Space name', metaPlaceholder: 'Notes: neighborhood, wifi, price…' },
+    { key: 'friends', title: 'Friends & contacts (mini-CRM)', placeholder: 'Name', metaPlaceholder: 'Notes: how you met, contact, what they do…' }
+  ];
+
+  subs.forEach(sub => wrap.appendChild(buildSubsection(city, sub)));
+  return wrap;
+}
+
+function buildSubsection(city, sub) {
+  const section = document.createElement('div');
+  section.className = 'subsection';
+  const cityId = city.id;
+
+  const head = document.createElement('div');
+  head.className = 'subsection-head';
+  head.innerHTML = `<span class="subsection-title">${sub.title}</span>`;
+  section.appendChild(head);
+
+  // Add row
+  const addRow = document.createElement('div');
+  addRow.className = 'subsection-add-row';
+  const input = document.createElement('input');
+  input.className = 'text-input';
+  input.placeholder = sub.placeholder;
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const v = input.value.trim();
+      if (v) {
+        addSubItem(cityId, sub.key, v);
+        input.value = '';
+      }
+    }
+  });
+  addRow.appendChild(input);
+  const btn = document.createElement('button');
+  btn.className = 'btn-secondary';
+  btn.textContent = 'Add';
+  btn.onclick = () => {
+    const v = input.value.trim();
+    if (v) {
+      addSubItem(cityId, sub.key, v);
+      input.value = '';
+    }
+  };
+  addRow.appendChild(btn);
+  section.appendChild(addRow);
+
+  // List
+  const list = document.createElement('div');
+  list.className = 'subsection-list';
+  const items = city[sub.key] || [];
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'sub-empty';
+    empty.textContent = 'Empty.';
+    list.appendChild(empty);
+  } else {
+    items.forEach(item => list.appendChild(buildSubItem(city, sub, item)));
+  }
+  section.appendChild(list);
+  return section;
+}
+
+function buildSubItem(city, sub, item) {
+  const cityId = city.id;
+  const itemId = item.id;
+  const wrap = document.createElement('div');
+  wrap.className = 'sub-item';
+
+  const main = document.createElement('div');
+  main.className = 'sub-item-main';
+
+  const name = document.createElement('div');
+  name.className = 'sub-item-name';
+  name.contentEditable = 'true';
+  name.textContent = item.name || '';
+  name.addEventListener('blur', () => {
+    const v = name.textContent.trim();
+    updateSubItem(cityId, sub.key, itemId, 'name', v);
+  });
+  name.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); name.blur(); }
+  });
+  main.appendChild(name);
+
+  const meta = document.createElement('div');
+  meta.className = 'sub-item-meta';
+  meta.contentEditable = 'true';
+  meta.dataset.placeholder = sub.metaPlaceholder || 'Notes';
+  meta.textContent = item.notes || '';
+  meta.addEventListener('blur', () => {
+    updateSubItem(cityId, sub.key, itemId, 'notes', meta.textContent.trim());
+  });
+  main.appendChild(meta);
+
+  wrap.appendChild(main);
+
+  const del = document.createElement('button');
+  del.className = 'icon-btn delete';
+  del.textContent = '✕';
+  del.onclick = () => removeSubItem(cityId, sub.key, itemId);
+  wrap.appendChild(del);
+
+  return wrap;
+}
+
+// ==================== IDEAS ====================
+
+function renderIdeas() {
+  // Filters
+  const filterBar = document.getElementById('idea-filters');
+  filterBar.innerHTML = '';
+  const counts = { all: state.ideas.length };
+  ['considering','shortlisted','booked','eliminated'].forEach(s => {
+    counts[s] = state.ideas.filter(i => i.status === s).length;
+  });
+  ['all','considering','shortlisted','booked','eliminated'].forEach(f => {
+    const pill = document.createElement('div');
+    pill.className = 'filter-pill' + (state.ideaFilter === f ? ' active' : '');
+    pill.textContent = f + ' (' + counts[f] + ')';
+    pill.onclick = () => { state.ideaFilter = f; saveState(); renderIdeas(); };
+    filterBar.appendChild(pill);
+  });
+
+  const meta = document.getElementById('ideas-meta');
+  meta.textContent = state.ideas.length + ' idea' + (state.ideas.length === 1 ? '' : 's');
+
+  const list = document.getElementById('idea-list');
+  list.innerHTML = '';
+  let ideas = state.ideas;
+  if (state.ideaFilter !== 'all') ideas = ideas.filter(i => i.status === state.ideaFilter);
+
+  if (ideas.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'sub-empty';
+    empty.style.padding = '24px';
+    empty.textContent = state.ideaFilter === 'all'
+      ? 'No ideas yet. Add destinations you\'re considering above.'
+      : 'No ideas in this filter.';
+    list.appendChild(empty);
+    return;
+  }
+
+  ideas.forEach(idea => list.appendChild(renderIdea(idea)));
+}
+
+function renderIdea(idea) {
+  const capturedId = idea.id;
+  const node = document.createElement('div');
+  node.className = 'idea' + (idea.status === 'eliminated' ? ' eliminated' : '');
+
+  const main = document.createElement('div');
+  main.className = 'idea-main';
+
+  const name = document.createElement('div');
+  name.className = 'idea-name';
+  name.contentEditable = 'true';
+  name.textContent = idea.name || '';
+  name.addEventListener('blur', () => updateIdea(capturedId, 'name', name.textContent.trim()));
+  name.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); name.blur(); } });
+  main.appendChild(name);
+
+  const notes = document.createElement('div');
+  notes.className = 'idea-notes';
+  notes.contentEditable = 'true';
+  notes.dataset.placeholder = 'Notes: climate, why interesting, why eliminated…';
+  notes.textContent = idea.notes || '';
+  notes.addEventListener('blur', () => updateIdea(capturedId, 'notes', notes.textContent.trim()));
+  main.appendChild(notes);
+
+  if (idea.country) {
+    const cm = document.createElement('div');
+    cm.className = 'muted';
+    cm.style.marginTop = '2px';
+    cm.style.fontFamily = "'JetBrains Mono', monospace";
+    cm.textContent = idea.country.toUpperCase();
+    main.appendChild(cm);
+  }
+
+  node.appendChild(main);
+
+  // Status select
+  const sel = document.createElement('select');
+  sel.className = 'select-input';
+  ['considering','shortlisted','booked','eliminated'].forEach(s => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+    if (s === idea.status) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.onchange = () => updateIdea(capturedId, 'status', sel.value);
+  node.appendChild(sel);
+
+  // Promote to city button
+  const promote = document.createElement('button');
+  promote.className = 'btn-secondary green';
+  promote.textContent = '→ Itinerary';
+  promote.title = 'Move to itinerary as a city';
+  promote.onclick = () => promoteIdea(capturedId);
+  node.appendChild(promote);
+
+  // Delete
+  const del = document.createElement('button');
+  del.className = 'icon-btn delete';
+  del.textContent = '✕';
+  del.onclick = () => removeIdea(capturedId);
+  node.appendChild(del);
+
+  return node;
+}
+
+// ==================== PROFILE ====================
+
+function renderProfile() {
+  const ta = document.getElementById('profile-area');
+  ta.value = state.profile;
+}
+
+function setupProfile() {
+  const ta = document.getElementById('profile-area');
+  ta.addEventListener('blur', () => {
+    state.profile = ta.value;
+    saveState();
+  });
+}
+
+function resetProfile() {
+  if (armConfirm('resetProfile', 'Click "Reset to default" again to confirm — your custom profile will be replaced.')) return;
+  state.profile = DEFAULT_PROFILE;
+  saveState();
+  renderProfile();
+  toast('Profile reset to default.', 'ok');
+}
+
+// ==================== SETTINGS ====================
+
+function setAIMode(mode) {
+  state.aiMode = mode;
+  document.getElementById('api-key-block').style.display = mode === 'api' ? 'block' : 'none';
+  saveState();
+}
+
+function setAPIKey(v) {
+  state.apiKey = v;
+  // debounced save
+  clearTimeout(window._keyTimer);
+  window._keyTimer = setTimeout(() => saveState(), 500);
+}
+
+function renderSettings() {
+  document.querySelector('input[name="ai-mode"][value="'+(state.aiMode||'copy')+'"]').checked = true;
+  document.getElementById('api-key-block').style.display = state.aiMode === 'api' ? 'block' : 'none';
+  document.getElementById('api-key-input').value = state.apiKey || '';
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'plan-ahead-' + todayISO() + '.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+
+function triggerFileImport() {
+  // Programmatically create file input within user gesture — most robust across sandboxes
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json,application/json,text/plain';
+  input.style.display = 'none';
+  input.addEventListener('change', (e) => {
+    importData(e);
+    setTimeout(() => { try { document.body.removeChild(input); } catch(e) {} }, 100);
+  });
+  document.body.appendChild(input);
+  input.click();
+}
+
+function setDataStatus(msg, kind) {
+  const el = document.getElementById('data-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = kind === 'error' ? 'var(--accent)' : kind === 'ok' ? 'var(--green)' : 'var(--text-3)';
+  if (kind === 'ok' || kind === 'error') {
+    setTimeout(() => {
+      if (el.textContent === msg) {
+        el.textContent = 'Export regularly. Browser data can be wiped — keep backups.';
+        el.style.color = '';
+      }
+    }, 6000);
+  }
+}
+
+function setPasteStatus(msg, kind) {
+  const el = document.getElementById('paste-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = kind === 'error' ? 'var(--accent)' : kind === 'ok' ? 'var(--green)' : 'var(--text-3)';
+}
+
+function importData(e) {
+  const file = e.target.files && e.target.files[0];
+  if (!file) { setDataStatus('No file selected.', 'error'); return; }
+  setDataStatus('Reading ' + file.name + '…');
+  const reader = new FileReader();
+  reader.onload = () => {
+    applyImportedJSON(reader.result, 'file');
+  };
+  reader.onerror = () => {
+    setDataStatus('Failed to read file: ' + (reader.error || 'unknown error'), 'error');
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function openPasteImport() {
+  document.getElementById('paste-import-area').value = '';
+  setPasteStatus('');
+  document.getElementById('paste-modal-bg').classList.add('show');
+  setTimeout(() => document.getElementById('paste-import-area').focus(), 50);
+}
+
+function closePasteImport() {
+  document.getElementById('paste-modal-bg').classList.remove('show');
+}
+
+function importFromPaste() {
+  const text = document.getElementById('paste-import-area').value.trim();
+  if (!text) { setPasteStatus('Paste JSON first.', 'error'); return; }
+  applyImportedJSON(text, 'paste');
+}
+
+function applyImportedJSON(text, source) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch(err) {
+    const msg = 'Could not parse JSON: ' + err.message;
+    if (source === 'paste') setPasteStatus(msg, 'error');
+    else setDataStatus(msg, 'error');
+    return false;
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    const msg = 'Imported data is not a valid object.';
+    if (source === 'paste') setPasteStatus(msg, 'error');
+    else setDataStatus(msg, 'error');
+    return false;
+  }
+  try {
+    state = Object.assign(defaultState(), parsed);
+    openCityIds = new Set();
+    saveState();
+    renderAll();
+    const cityCount = (state.cities || []).length;
+    const ideaCount = (state.ideas || []).length;
+    const okMsg = `Imported ${cityCount} cit${cityCount===1?'y':'ies'}, ${ideaCount} idea${ideaCount===1?'':'s'}.`;
+    if (source === 'paste') {
+      setPasteStatus(okMsg + ' Closing…', 'ok');
+      setTimeout(closePasteImport, 800);
+    }
+    setDataStatus(okMsg, 'ok');
+    return true;
+  } catch(err) {
+    const msg = 'Error applying imported data: ' + err.message;
+    if (source === 'paste') setPasteStatus(msg, 'error');
+    else setDataStatus(msg, 'error');
+    return false;
+  }
+}
+
+// ==================== NOTES IMPORT (AI-powered) ====================
+
+const NOTES_EXTRACTION_PROMPT = `You are extracting travel planning information from a user's notes or conversation into structured JSON for a nomad travel planner.
+
+Output ONLY valid JSON, no preamble, no markdown fences. Use this exact shape:
+{
+  "cities": [
+    {
+      "name": "string",
+      "country": "string",
+      "checkIn": "YYYY-MM-DD or null",
+      "checkOut": "YYYY-MM-DD or null",
+      "status": "tentative | shortlisted | booked",
+      "notes": "1-2 sentences of key context from the text",
+      "neighborhoods": [{"name": "string", "notes": "string"}],
+      "attractions": [{"name": "string", "notes": "string"}],
+      "restaurants": [{"name": "string", "notes": "string"}],
+      "dayTrips": [{"name": "string", "notes": "string"}],
+      "coworking": [{"name": "string", "notes": "string"}],
+      "accommodations": [{"name": "string", "link": "string", "neighborhood": "string", "notes": "string"}]
+    }
+  ],
+  "ideas": [
+    {
+      "name": "string",
+      "country": "string",
+      "status": "considering | shortlisted | eliminated",
+      "notes": "1-2 sentences of key context from the text"
+    }
+  ]
+}
+
+Classification rules:
+- CITIES: locations the user is actively planning to visit (has dates, or strong commitment language)
+- IDEAS: locations being considered, mentioned as candidates, or explicitly eliminated/rejected
+- If a location was discussed then dismissed (e.g., "too hot in August"), put it in ideas with status "eliminated" and explain why in notes
+- Do NOT invent dates, neighborhoods, or details not in the text
+- Omit sub-arrays if no items were mentioned (use empty arrays, not null)
+- Use ISO format for dates: YYYY-MM-DD
+- For dates spanning months like "August 1 - 17", use 2026 unless context indicates otherwise
+
+User's notes follow below. Extract everything you can find:
+
+---
+`;
+
+let _notesExtracted = null;
+
+function openNotesImport() {
+  document.getElementById('notes-input').value = '';
+  document.getElementById('notes-json').value = '';
+  document.getElementById('notes-step2').style.display = 'none';
+  document.getElementById('notes-preview').style.display = 'none';
+  document.getElementById('notes-apply-btn').style.display = 'none';
+  document.getElementById('notes-status').textContent = '';
+  _notesExtracted = null;
+
+  // Show/hide AI button based on whether API is configured
+  const aiBtn = document.getElementById('notes-ai-btn');
+  if (state.aiMode === 'api' && state.apiKey) {
+    aiBtn.disabled = false;
+    aiBtn.title = '';
+    aiBtn.textContent = '⚡ Process with AI (live)';
+  } else {
+    aiBtn.disabled = true;
+    aiBtn.title = 'Set up API mode + key in Settings to enable live processing';
+    aiBtn.textContent = '⚡ Process with AI (configure API key first)';
+  }
+
+  document.getElementById('notes-modal-bg').classList.add('show');
+  setTimeout(() => document.getElementById('notes-input').focus(), 50);
+}
+
+function closeNotesImport() {
+  document.getElementById('notes-modal-bg').classList.remove('show');
+}
+
+function setNotesStatus(msg, kind) {
+  const el = document.getElementById('notes-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = kind === 'error' ? 'var(--accent)' : kind === 'ok' ? 'var(--green)' : 'var(--text-3)';
+}
+
+function buildNotesPrompt(notesText) {
+  return NOTES_EXTRACTION_PROMPT + notesText;
+}
+
+function copyNotesPrompt() {
+  const notes = document.getElementById('notes-input').value.trim();
+  if (!notes) { setNotesStatus('Paste notes first.', 'error'); return; }
+  const prompt = buildNotesPrompt(notes);
+  navigator.clipboard.writeText(prompt).then(() => {
+    setNotesStatus('✓ Prompt + your notes copied. Paste into Claude.ai, copy the JSON response back into Step 2 below.', 'ok');
+    document.getElementById('notes-step2').style.display = 'block';
+  }).catch(err => setNotesStatus('Copy failed: ' + err.message, 'error'));
+}
+
+async function runNotesAI() {
+  const notes = document.getElementById('notes-input').value.trim();
+  if (!notes) { setNotesStatus('Paste notes first.', 'error'); return; }
+  if (state.aiMode !== 'api' || !state.apiKey) {
+    setNotesStatus('API mode + key required. Configure in Settings, or use Copy extraction prompt.', 'error');
+    return;
+  }
+  const btn = document.getElementById('notes-ai-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Processing…';
+  setNotesStatus('Sending to Claude…');
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8000,
+        messages: [{ role: 'user', content: buildNotesPrompt(notes) }]
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error('API error (' + res.status + '): ' + errText.slice(0, 200));
+    }
+    const data = await res.json();
+    const text = (data.content || []).map(b => b.text || '').filter(Boolean).join('\n').trim();
+    // Strip markdown fences if Claude added them despite instructions
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    document.getElementById('notes-json').value = cleaned;
+    document.getElementById('notes-step2').style.display = 'block';
+    setNotesStatus('✓ Extracted. Review below or click Preview.', 'ok');
+    previewNotesImport();
+  } catch(err) {
+    setNotesStatus('AI call failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ Process with AI (live)';
+  }
+}
+
+function previewNotesImport() {
+  const text = document.getElementById('notes-json').value.trim();
+  if (!text) { setNotesStatus('Paste JSON response first.', 'error'); return; }
+  let parsed;
+  try {
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    parsed = JSON.parse(cleaned);
+  } catch(err) {
+    setNotesStatus('Could not parse JSON: ' + err.message, 'error');
+    return;
+  }
+  if (!parsed || typeof parsed !== 'object') {
+    setNotesStatus('Response is not a JSON object.', 'error');
+    return;
+  }
+  const cities = Array.isArray(parsed.cities) ? parsed.cities : [];
+  const ideas = Array.isArray(parsed.ideas) ? parsed.ideas : [];
+  if (cities.length === 0 && ideas.length === 0) {
+    setNotesStatus('No destinations found in the response.', 'error');
+    return;
+  }
+  _notesExtracted = { cities, ideas };
+
+  // Build preview
+  const previewEl = document.getElementById('notes-preview-content');
+  let html = '';
+  if (cities.length > 0) {
+    html += `<div style="margin-bottom:10px"><strong style="font-family:'Fraunces',Georgia,serif">${cities.length} cit${cities.length===1?'y':'ies'} to add</strong></div>`;
+    html += '<ul style="margin:0 0 12px 18px;padding:0">';
+    cities.forEach(c => {
+      const subs = [];
+      if ((c.accommodations||[]).length) subs.push(c.accommodations.length + ' accom');
+      if ((c.neighborhoods||[]).length) subs.push(c.neighborhoods.length + ' neighborhoods');
+      if ((c.attractions||[]).length) subs.push(c.attractions.length + ' attractions');
+      if ((c.restaurants||[]).length) subs.push(c.restaurants.length + ' restaurants');
+      if ((c.coworking||[]).length) subs.push(c.coworking.length + ' coworking');
+      if ((c.dayTrips||[]).length) subs.push(c.dayTrips.length + ' day trips');
+      const dates = (c.checkIn || c.checkOut) ? ` · ${c.checkIn||'?'} → ${c.checkOut||'?'}` : '';
+      const subText = subs.length ? ` <span style="color:var(--text-3);font-size:11px">(${subs.join(', ')})</span>` : '';
+      html += `<li style="margin-bottom:4px"><strong>${escapeHTML(c.name)}</strong>, ${escapeHTML(c.country||'?')}${escapeHTML(dates)}${subText}</li>`;
+    });
+    html += '</ul>';
+  }
+  if (ideas.length > 0) {
+    html += `<div style="margin-bottom:10px"><strong style="font-family:'Fraunces',Georgia,serif">${ideas.length} idea${ideas.length===1?'':'s'} to add</strong></div>`;
+    html += '<ul style="margin:0;padding:0 0 0 18px">';
+    ideas.forEach(i => {
+      const status = i.status ? ` <span class="pill ${i.status}" style="font-size:9px;padding:2px 6px">${i.status}</span>` : '';
+      html += `<li style="margin-bottom:4px"><strong>${escapeHTML(i.name)}</strong>, ${escapeHTML(i.country||'?')}${status}</li>`;
+    });
+    html += '</ul>';
+  }
+  previewEl.innerHTML = html;
+  document.getElementById('notes-preview').style.display = 'block';
+  document.getElementById('notes-apply-btn').style.display = 'inline-block';
+  setNotesStatus('Review the preview, then click "Apply to itinerary" to add.', 'ok');
+}
+
+function applyNotesImport() {
+  if (!_notesExtracted) { setNotesStatus('Click Preview first.', 'error'); return; }
+
+  let cityAdded = 0, citySkipped = 0, ideaAdded = 0, ideaSkipped = 0;
+
+  // Build lookup for existing names (lowercase)
+  const existingCityNames = new Set((state.cities||[]).map(c => (c.name||'').toLowerCase()));
+  const existingIdeaNames = new Set((state.ideas||[]).map(i => (i.name||'').toLowerCase()));
+
+  (_notesExtracted.cities || []).forEach(c => {
+    const nameLower = (c.name||'').toLowerCase();
+    if (!c.name || existingCityNames.has(nameLower)) { citySkipped++; return; }
+    const coords = lookupCity(c.name, c.country);
+    const city = {
+      id: newId(),
+      name: c.name,
+      country: c.country || '',
+      checkIn: c.checkIn || '',
+      checkOut: c.checkOut || '',
+      state: '',
+      status: c.status || 'tentative',
+      notes: c.notes || '',
+      estimatedCost: '',
+      lat: coords ? coords.lat : '',
+      lng: coords ? coords.lng : '',
+      accommodations: (c.accommodations||[]).map(a => ({
+        id: newId(),
+        name: a.name || '', link: a.link || '', neighborhood: a.neighborhood || '',
+        checkIn: '', checkOut: '', cost: '', currency: 'USD',
+        status: 'considering', notes: a.notes || ''
+      })),
+      neighborhoods: (c.neighborhoods||[]).map(x => ({id: newId(), name: x.name||'', notes: x.notes||''})),
+      attractions: (c.attractions||[]).map(x => ({id: newId(), name: x.name||'', notes: x.notes||''})),
+      restaurants: (c.restaurants||[]).map(x => ({id: newId(), name: x.name||'', notes: x.notes||''})),
+      dayTrips: (c.dayTrips||[]).map(x => ({id: newId(), name: x.name||'', notes: x.notes||''})),
+      coworking: (c.coworking||[]).map(x => ({id: newId(), name: x.name||'', notes: x.notes||''})),
+      friends: []
+    };
+    state.cities.push(city);
+    cityAdded++;
+  });
+
+  (_notesExtracted.ideas || []).forEach(i => {
+    const nameLower = (i.name||'').toLowerCase();
+    if (!i.name || existingIdeaNames.has(nameLower)) { ideaSkipped++; return; }
+    state.ideas.unshift({
+      id: newId(),
+      name: i.name,
+      country: i.country || '',
+      status: i.status || 'considering',
+      notes: i.notes || ''
+    });
+    ideaAdded++;
+  });
+
+  saveState();
+  renderAll();
+
+  const parts = [];
+  if (cityAdded) parts.push('+' + cityAdded + ' cit' + (cityAdded===1?'y':'ies'));
+  if (ideaAdded) parts.push('+' + ideaAdded + ' idea' + (ideaAdded===1?'':'s'));
+  if (citySkipped) parts.push(citySkipped + ' city dup' + (citySkipped===1?'':'s') + ' skipped');
+  if (ideaSkipped) parts.push(ideaSkipped + ' idea dup' + (ideaSkipped===1?'':'s') + ' skipped');
+  toast('Applied: ' + parts.join(', '), 'ok');
+  closeNotesImport();
+}
+
+function resetAll() {
+  // In-DOM confirmation via the status div with a 5-second window
+  const el = document.getElementById('data-status');
+  if (!el) return;
+  if (el.dataset.armed === '1') {
+    state = defaultState();
+    saveState();
+    renderAll();
+    setDataStatus('Reset complete.', 'ok');
+    el.dataset.armed = '0';
+    return;
+  }
+  el.dataset.armed = '1';
+  el.textContent = 'Click "Reset everything" again within 5 seconds to confirm.';
+  el.style.color = 'var(--accent)';
+  setTimeout(() => {
+    if (el.dataset.armed === '1') {
+      el.dataset.armed = '0';
+      el.textContent = 'Auto-saved continuously to your browser. Export regularly — browser data can be wiped.';
+      el.style.color = '';
+    }
+  }, 5000);
+}
+
+function toggleSnapshots() {
+  const block = document.getElementById('snapshots-block');
+  const isOpen = block.style.display !== 'none';
+  if (isOpen) {
+    block.style.display = 'none';
+  } else {
+    block.style.display = 'block';
+    renderSnapshots();
+  }
+}
+
+function renderSnapshots() {
+  const list = document.getElementById('snapshots-list');
+  list.innerHTML = '';
+  const snaps = loadSnapshots();
+  if (snaps.length === 0) {
+    list.innerHTML = '<div class="muted">No snapshots yet. First one will be taken 10 minutes after your next change.</div>';
+    return;
+  }
+  snaps.forEach(snap => {
+    const cities = (snap.data.cities || []).length;
+    const ideas = (snap.data.ideas || []).length;
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:var(--bg-softer);padding:8px 12px;border-radius:6px;font-size:13px';
+    row.innerHTML = `
+      <div>
+        <div style="font-weight:500">${new Date(snap.ts).toLocaleString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</div>
+        <div class="muted" style="font-size:11px">${cities} cit${cities===1?'y':'ies'}, ${ideas} idea${ideas===1?'':'s'}</div>
+      </div>
+    `;
+    const btn = document.createElement('button');
+    btn.className = 'btn-secondary';
+    btn.textContent = 'Restore';
+    btn.onclick = () => restoreSnapshot(snap.ts);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+}
+
+// ==================== ACTIONS ====================
+
+function addCity() {
+  const name = document.getElementById('add-city-name').value.trim();
+  const country = document.getElementById('add-city-country').value;
+  const checkIn = document.getElementById('add-city-checkin').value;
+  const checkOut = document.getElementById('add-city-checkout').value;
+  if (!name) { toast('City name required.', 'error'); return; }
+  // Try built-in coordinate lookup immediately
+  const coords = lookupCity(name, country);
+  const city = {
+    id: newId(), name, country, checkIn, checkOut,
+    state: '', status: 'tentative',
+    notes: '', estimatedCost: '',
+    lat: coords ? coords.lat : '', lng: coords ? coords.lng : '',
+    accommodations: [],
+    neighborhoods: [], attractions: [], restaurants: [], dayTrips: [], coworking: [], friends: []
+  };
+  state.cities.push(city);
+  saveState();
+  document.getElementById('add-city-name').value = '';
+  document.getElementById('add-city-country').value = '';
+  document.getElementById('add-city-checkin').value = '';
+  document.getElementById('add-city-checkout').value = '';
+  openCityIds.add(city.id);
+  renderAll();
+  if (coords) {
+    toast('📍 ' + name + ' added with coordinates.', 'ok');
+  } else {
+    // Try external geocode (fire-and-forget); will update if it succeeds
+    autoGeocodeCity(city.id);
+    toast(name + ' added. Coordinates not in built-in database — try Lookup button or enter manually.');
+  }
+}
+
+function updateCity(id, key, value) {
+  const c = state.cities.find(c => c.id === id);
+  if (!c) return;
+  c[key] = value;
+  saveState();
+  renderNow();
+  renderCounters();
+  renderCities();
+  if (key === 'lat' || key === 'lng' || key === 'checkIn' || key === 'checkOut' || key === 'country' || key === 'name') {
+    renderMap();
+  }
+  // Auto-geocode if name or country was set, and we don't have coordinates yet
+  if ((key === 'name' || key === 'country') && c.name && c.country && (c.lat == null || c.lat === '')) {
+    autoGeocodeCity(id);
+  }
+}
+
+function deleteCity(id) {
+  const c = state.cities.find(c => c.id === id);
+  if (!c) return;
+  if (armConfirm('deleteCity:' + id, `Click "Delete this city" again to permanently remove ${c.name}.`)) return;
+  state.cities = state.cities.filter(c => c.id !== id);
+  openCityIds.delete(id);
+  saveState();
+  renderAll();
+  toast('Deleted ' + c.name + '.', 'ok');
+}
+
+function addAccommodation(cityId) {
+  const c = state.cities.find(c => c.id === cityId);
+  if (!c) return;
+  if (!c.accommodations) c.accommodations = [];
+  c.accommodations.push({
+    id: newId(), name: '', link: '', neighborhood: '',
+    checkIn: c.checkIn || '', checkOut: c.checkOut || '',
+    cost: '', currency: 'USD', status: 'considering', notes: ''
+  });
+  saveState();
+  renderCities();
+}
+
+function updateAccom(cityId, accId, key, value) {
+  const c = state.cities.find(c => c.id === cityId);
+  if (!c || !c.accommodations) return;
+  const a = c.accommodations.find(a => a.id === accId);
+  if (!a) return;
+  a[key] = value;
+  saveState();
+  renderNow();
+  renderCounters();
+  renderCities();
+}
+
+function removeAccom(cityId, accId) {
+  const c = state.cities.find(c => c.id === cityId);
+  if (!c || !c.accommodations) return;
+  c.accommodations = c.accommodations.filter(a => a.id !== accId);
+  saveState();
+  renderCities();
+}
+
+function addSubItem(cityId, key, name) {
+  const c = state.cities.find(c => c.id === cityId);
+  if (!c) return;
+  if (!c[key]) c[key] = [];
+  c[key].push({ id: newId(), name, notes: '' });
+  saveState();
+  renderCities();
+}
+
+function updateSubItem(cityId, key, itemId, field, value) {
+  const c = state.cities.find(c => c.id === cityId);
+  if (!c || !c[key]) return;
+  const item = c[key].find(i => i.id === itemId);
+  if (!item) return;
+  item[field] = value;
+  saveState();
+}
+
+function removeSubItem(cityId, key, itemId) {
+  const c = state.cities.find(c => c.id === cityId);
+  if (!c || !c[key]) return;
+  c[key] = c[key].filter(i => i.id !== itemId);
+  saveState();
+  renderCities();
+}
+
+function addIdea() {
+  const name = document.getElementById('add-idea-name').value.trim();
+  const country = document.getElementById('add-idea-country').value;
+  const status = document.getElementById('add-idea-status').value;
+  if (!name) { toast('Idea name required.', 'error'); return; }
+  state.ideas.unshift({ id: newId(), name, country, status, notes: '' });
+  saveState();
+  document.getElementById('add-idea-name').value = '';
+  document.getElementById('add-idea-country').value = '';
+  renderIdeas();
+}
+
+function updateIdea(id, key, value) {
+  const idea = state.ideas.find(i => i.id === id);
+  if (!idea) return;
+  idea[key] = value;
+  saveState();
+  renderIdeas();
+}
+
+function removeIdea(id) {
+  state.ideas = state.ideas.filter(i => i.id !== id);
+  saveState();
+  renderIdeas();
+}
+
+function promoteIdea(id) {
+  const idea = state.ideas.find(i => i.id === id);
+  if (!idea) return;
+  const city = {
+    id: newId(), name: idea.name, country: idea.country || '',
+    checkIn: '', checkOut: '', state: '', status: 'tentative',
+    notes: idea.notes || '', estimatedCost: '',
+    accommodations: [],
+    neighborhoods: [], attractions: [], restaurants: [], dayTrips: [], coworking: [], friends: []
+  };
+  state.cities.push(city);
+  state.ideas = state.ideas.filter(i => i.id !== id);
+  openCityIds.add(city.id);
+  saveState();
+  renderAll();
+  // Scroll to itinerary
+  document.querySelector('.section-head h2 + .meta')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ==================== AI PROMPT ====================
+
+let currentPrompt = '';
+let currentAcc = null;
+
+function buildAccomPrompt(city, acc) {
+  const nights = nightsBetween(acc.checkIn, acc.checkOut);
+  const lines = [];
+  lines.push("I'm a long-term digital nomad evaluating an accommodation. Please assess it against my travel criteria.");
+  lines.push("");
+  lines.push("## My travel profile");
+  lines.push(state.profile);
+  lines.push("");
+  lines.push("## Destination");
+  lines.push(`- City: ${city.name}`);
+  if (city.country) lines.push(`- Country: ${city.country}`);
+  if (city.checkIn || city.checkOut) lines.push(`- City dates: ${city.checkIn||'?'} → ${city.checkOut||'?'}`);
+  if (city.notes) lines.push(`- City notes: ${city.notes}`);
+  lines.push("");
+  lines.push("## Accommodation under consideration");
+  lines.push(`- Name: ${acc.name || '(unnamed)'}`);
+  if (acc.link) lines.push(`- Listing URL: ${acc.link}`);
+  if (acc.neighborhood) lines.push(`- Neighborhood: ${acc.neighborhood}`);
+  if (acc.checkIn || acc.checkOut) lines.push(`- Stay: ${acc.checkIn||'?'} → ${acc.checkOut||'?'}` + (nights ? ` (${nights} night${nights===1?'':'s'})` : ''));
+  if (acc.cost) lines.push(`- Cost: ${acc.cost} ${acc.currency||'USD'}` + (nights ? ` (${Math.round(acc.cost/nights)} ${acc.currency||'USD'}/night)` : ''));
+  if (acc.notes) lines.push(`- My notes: ${acc.notes}`);
+  lines.push("");
+  lines.push("## Please provide");
+  lines.push("1. Fit score 1–10 against my criteria");
+  lines.push("2. Pros aligned with my profile");
+  lines.push("3. Concerns or red flags");
+  lines.push("4. Questions I should ask the host before booking");
+  lines.push("5. What to verify on the listing page (wifi, AC, desk, noise, neighborhood)");
+  lines.push("6. Comparable alternatives I should look at in this city");
+  lines.push("");
+  lines.push("Be direct. If you can't find the listing online or need more info, say what info you'd need.");
+  return lines.join("\n");
+}
+
+function openAccomAssessment(city, acc) {
+  currentPrompt = buildAccomPrompt(city, acc);
+  currentAcc = { cityId: city.id, accId: acc.id };
+  document.getElementById('modal-title').textContent = 'AI assessment prompt';
+  document.getElementById('modal-sub').textContent = `${city.name} · ${acc.name || '(unnamed)'}`;
+  document.getElementById('modal-textarea').value = currentPrompt;
+  document.getElementById('modal-response').style.display = 'none';
+  document.getElementById('modal-api-btn').style.display = state.aiMode === 'api' ? 'inline-block' : 'none';
+  document.getElementById('modal-bg').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal-bg').classList.remove('show');
+}
+
+function copyPrompt() {
+  navigator.clipboard.writeText(currentPrompt).then(() => {
+    const btn = document.getElementById('modal-copy-btn');
+    const orig = btn.textContent;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }).catch(err => toast('Copy failed: ' + err.message, 'error'));
+}
+
+async function runAPI() {
+  if (!state.apiKey) {
+    toast('API key required. Add it in Settings.', 'error');
+    return;
+  }
+  const btn = document.getElementById('modal-api-btn');
+  const orig = btn.textContent;
+  btn.textContent = 'Running…';
+  btn.disabled = true;
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: currentPrompt }]
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error('API error (' + res.status + '): ' + errText.slice(0, 300));
+    }
+    const data = await res.json();
+    const text = (data.content || []).map(b => b.text || '').filter(Boolean).join('\n');
+    document.getElementById('modal-response-content').textContent = text || '(empty response)';
+    document.getElementById('modal-response').style.display = 'block';
+  } catch(err) {
+    toast('API call failed: ' + err.message, 'error');
+  } finally {
+    btn.textContent = orig;
+    btn.disabled = false;
+  }
+}
+
+// ==================== UTIL ====================
+
+function escapeHTML(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+// Toast: non-blocking replacement for alert() — works in any sandbox
+let _toastTimer;
+function toast(msg, kind) {
+  const el = document.getElementById('toast');
+  if (!el) { console.log('[toast]', msg); return; }
+  el.textContent = msg;
+  el.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+  }, kind === 'error' ? 4500 : 3000);
+}
+
+// armConfirm: replacement for blocking confirm() — first click arms, second click within timeout fires
+// Returns true if armed (caller should not proceed yet), false if confirmed (proceed)
+const _armState = {};
+function armConfirm(key, armedMessage, timeoutMs) {
+  if (_armState[key]) {
+    delete _armState[key];
+    return false; // confirmed, proceed
+  }
+  _armState[key] = true;
+  toast(armedMessage || 'Click again to confirm', 'error');
+  setTimeout(() => { delete _armState[key]; }, timeoutMs || 5000);
+  return true; // armed, do not proceed
+}
+
+// ==================== LAT/LNG + MAP ====================
+
+function buildLatLngRow(city) {
+  const wrap = document.createElement('div');
+  wrap.className = 'latlng-row';
+  const capturedId = city.id;
+
+  const latWrap = document.createElement('div');
+  latWrap.innerHTML = '<span class="field-label">Latitude</span>';
+  const latIn = document.createElement('input');
+  latIn.className = 'field-input';
+  latIn.type = 'number'; latIn.step = 'any';
+  latIn.value = city.lat || '';
+  latIn.placeholder = 'e.g. 32.6669';
+  latIn.onblur = () => updateCity(capturedId, 'lat', latIn.value ? parseFloat(latIn.value) : '');
+  latWrap.appendChild(latIn);
+  wrap.appendChild(latWrap);
+
+  const lngWrap = document.createElement('div');
+  lngWrap.innerHTML = '<span class="field-label">Longitude</span>';
+  const lngIn = document.createElement('input');
+  lngIn.className = 'field-input';
+  lngIn.type = 'number'; lngIn.step = 'any';
+  lngIn.value = city.lng || '';
+  lngIn.placeholder = 'e.g. -16.9241';
+  lngIn.onblur = () => updateCity(capturedId, 'lng', lngIn.value ? parseFloat(lngIn.value) : '');
+  lngWrap.appendChild(lngIn);
+  wrap.appendChild(lngWrap);
+
+  const btnWrap = document.createElement('div');
+  const btn = document.createElement('button');
+  btn.className = 'btn-secondary';
+  btn.textContent = '🔍 Lookup coordinates';
+  btn.onclick = async () => {
+    const c = state.cities.find(c => c.id === capturedId);
+    if (!c || !c.name) { toast('Need a city name first.', 'error'); return; }
+    btn.disabled = true;
+    btn.textContent = 'Looking up…';
+    const result = await geocode(c.name, c.country);
+    btn.disabled = false;
+    btn.textContent = '🔍 Lookup coordinates';
+    if (result) {
+      c.lat = result.lat;
+      c.lng = result.lng;
+      saveState();
+      renderCities();
+      renderMap();
+      toast('📍 Found ' + c.name + ' at ' + result.lat.toFixed(3) + ', ' + result.lng.toFixed(3), 'ok');
+    } else {
+      toast('Not in built-in database and external lookup unavailable in this environment. Enter lat/lng manually.', 'error');
+    }
+  };
+  btnWrap.appendChild(btn);
+  wrap.appendChild(btnWrap);
+
+  return wrap;
+}
+
+async function geocode(name, country) {
+  if (!name) return null;
+  // 1. Try built-in lookup first — instant, no network
+  const localHit = lookupCity(name, country);
+  if (localHit) return localHit;
+  // 2. Try Nominatim (works locally / GitHub Pages; may be blocked in sandboxed previews)
+  try {
+    const q = encodeURIComponent(name + (country ? ', ' + country : ''));
+    const res = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + q, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data || data.length === 0) return null;
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch(e) {
+    console.warn('Nominatim fetch failed (likely sandbox CORS). Manual entry needed.', e.message);
+    return null;
+  }
+}
+
+// Auto-geocode helper: when both name and country are present and lat/lng not yet set
+async function autoGeocodeCity(cityId) {
+  const c = state.cities.find(c => c.id === cityId);
+  if (!c || !c.name || !c.country) return;
+  if (c.lat != null && c.lat !== '' && c.lng != null && c.lng !== '') return; // already has coords
+  const result = await geocode(c.name, c.country);
+  if (result) {
+    c.lat = result.lat;
+    c.lng = result.lng;
+    saveState();
+    renderCities();
+    renderMap();
+    toast('📍 Found coordinates for ' + c.name, 'ok');
+  }
+}
+
+let _map = null;
+let _markers = [];
+let _mapRetries = 0;
+const MAX_MAP_RETRIES = 25; // 25 × 200ms = 5 seconds
+
+function renderMap() {
+  const mapEl = document.getElementById('map');
+  if (!mapEl) return;
+  const emptyEl = document.getElementById('map-empty');
+
+  if (typeof L === 'undefined') {
+    _mapRetries++;
+    if (_mapRetries >= MAX_MAP_RETRIES) {
+      // Leaflet failed to load (likely sandbox CSP blocking the CDN)
+      emptyEl.style.display = 'flex';
+      emptyEl.innerHTML = 'Map library could not load.<br><span style="font-size:11px;font-family:\'JetBrains Mono\',monospace;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em">External scripts may be blocked in this preview environment. The map will work when deployed to GitHub Pages or opened as a local file.</span>';
+      return;
+    }
+    setTimeout(renderMap, 200);
+    return;
+  }
+  // Reset retry counter once loaded
+  _mapRetries = 0;
+
+  const todayStr = todayISO();
+
+  // Collect points
+  const cityPoints = state.cities.filter(c => c.lat != null && c.lng != null && c.lat !== '' && c.lng !== '');
+  const ideaPoints = (state.ideas || []).filter(i => i.lat != null && i.lng != null);
+
+  if (cityPoints.length === 0 && ideaPoints.length === 0) {
+    if (_map) {
+      _markers.forEach(m => _map.removeLayer(m));
+      _markers = [];
+    }
+    emptyEl.style.display = 'flex';
+    document.getElementById('map-meta').textContent = '—';
+    const rbtn = document.getElementById('map-reset-btn');
+    if (rbtn) rbtn.style.display = 'none';
+    return;
+  }
+  emptyEl.style.display = 'none';
+  const rbtn = document.getElementById('map-reset-btn');
+  if (rbtn) rbtn.style.display = '';
+
+  // Init map if not yet
+  if (!_map) {
+    _map = L.map(mapEl, { zoomControl: true, attributionControl: true })
+      .setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '© OpenStreetMap'
+    }).addTo(_map);
+  }
+
+  // Clear old markers
+  _markers.forEach(m => _map.removeLayer(m));
+  _markers = [];
+
+  const bounds = [];
+
+  cityPoints.forEach(c => {
+    let kind = 'future';
+    if (c.checkOut && c.checkOut < todayStr) kind = 'past';
+    else if (c.checkIn && c.checkOut && c.checkIn <= todayStr && c.checkOut > todayStr) kind = 'now';
+    const marker = L.circleMarker([c.lat, c.lng], markerStyleFor(kind));
+    marker.bindPopup(buildPopup(c, kind));
+    marker.addTo(_map);
+    _markers.push(marker);
+    bounds.push([c.lat, c.lng]);
+  });
+
+  ideaPoints.forEach(i => {
+    const marker = L.circleMarker([i.lat, i.lng], markerStyleFor('idea'));
+    marker.bindPopup(`<div class="map-popup"><div class="name">${escapeHTML(i.name)}</div><div class="meta">Idea · ${escapeHTML(i.status||'considering')}</div></div>`);
+    marker.addTo(_map);
+    _markers.push(marker);
+    bounds.push([i.lat, i.lng]);
+  });
+
+  if (bounds.length > 1) {
+    _map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+  } else if (bounds.length === 1) {
+    _map.setView(bounds[0], 6);
+  }
+
+  document.getElementById('map-meta').textContent = `${cityPoints.length} cit${cityPoints.length===1?'y':'ies'}${ideaPoints.length ? ' · ' + ideaPoints.length + ' idea' + (ideaPoints.length===1?'':'s') : ''}`;
+}
+
+function markerStyleFor(kind) {
+  const base = { radius: 8, weight: 2, opacity: 1, fillOpacity: 0.9 };
+  if (kind === 'past') return { ...base, color: '#555', fillColor: '#888' };
+  if (kind === 'now') return { ...base, color: '#9c181d', fillColor: '#c72027', radius: 10 };
+  if (kind === 'future') return { ...base, color: '#c72027', fillColor: '#ffffff', fillOpacity: 0.95 };
+  if (kind === 'idea') return { ...base, color: '#1f4a70', fillColor: '#2c5d8a' };
+  return base;
+}
+
+function buildPopup(c, kind) {
+  const labels = { past: 'Past', now: 'Now', future: 'Future' };
+  return `<div class="map-popup">
+    <div class="name">${escapeHTML(c.name)}</div>
+    <div class="meta">${labels[kind]} · ${escapeHTML(c.country||'')}</div>
+    <div class="dates">${fmtDate(c.checkIn)} → ${fmtDate(c.checkOut)}</div>
+  </div>`;
+}
+
+function resetMapView() {
+  if (!_map) return;
+  const bounds = [];
+  state.cities.forEach(c => {
+    if (c.lat != null && c.lng != null && c.lat !== '' && c.lng !== '') {
+      bounds.push([parseFloat(c.lat), parseFloat(c.lng)]);
+    }
+  });
+  (state.ideas || []).forEach(i => {
+    if (i.lat != null && i.lng != null && i.lat !== '' && i.lng !== '') {
+      bounds.push([parseFloat(i.lat), parseFloat(i.lng)]);
+    }
+  });
+  if (bounds.length > 1) {
+    _map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+  } else if (bounds.length === 1) {
+    _map.setView(bounds[0], 6);
+  } else {
+    _map.setView([20, 0], 2);
+  }
+}
+
+// ==================== RENDER ALL ====================
+
+function renderAll() {
+  updateHero();
+  renderNow();
+  renderCounters();
+  renderCities();
+  renderIdeas();
+  renderProfile();
+  renderSettings();
+  renderMap();
+}
+
+// ==================== INIT ====================
+
+populateCountries();
+setupProfile();
+renderAll();
+</script>
+
+</body>
+</html>
