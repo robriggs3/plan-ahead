@@ -3551,16 +3551,12 @@ function duplicateCity(id) {
 function demoteCity(id) {
   const c = state.cities.find(c => c.id === id);
   if (!c) return;
-  // Build a richer note that preserves what was here
-  const detailSummary = [];
-  if ((c.accommodations||[]).length) detailSummary.push((c.accommodations.length) + ' property note' + (c.accommodations.length===1?'':'s'));
-  if ((c.neighborhoods||[]).length) detailSummary.push((c.neighborhoods.length) + ' nbhd');
-  if ((c.attractions||[]).length) detailSummary.push((c.attractions.length) + ' attr');
-  if ((c.restaurants||[]).length) detailSummary.push((c.restaurants.length) + ' rest');
-  const lost = detailSummary.length ? ` (lost detail: ${detailSummary.join(', ')})` : '';
 
-  if (armConfirm('demoteCity:' + id, `Click Demote again to move ${c.name} back to Ideas${lost}. Notes preserved; per-city detail (accommodations, neighborhoods, etc.) will be discarded.`)) return;
+  // Deep-copy the city for potential undo
+  const cityBackup = JSON.parse(JSON.stringify(c));
+  const cityIndex = state.cities.findIndex(x => x.id === id);
 
+  // Create the idea
   const idea = {
     id: newId(),
     name: c.name,
@@ -3568,12 +3564,30 @@ function demoteCity(id) {
     status: 'considering',
     notes: c.notes || ''
   };
+
+  // Perform the demotion
   state.ideas.unshift(idea);
   state.cities = state.cities.filter(x => x.id !== id);
   openCityIds.delete(id);
   saveState();
   renderAll();
-  toast(`✓ Demoted ${c.name} to Ideas.`, 'ok');
+
+  // Toast with undo
+  const cityName = c.name;
+  toastWithAction(
+    `✓ Demoted ${cityName} to Ideas`,
+    'Undo',
+    () => {
+      // Restore the city to its original position
+      const insertAt = Math.min(cityIndex, state.cities.length);
+      state.cities.splice(insertAt, 0, cityBackup);
+      state.ideas = state.ideas.filter(i => i.id !== idea.id);
+      saveState();
+      renderAll();
+      toast(`Restored ${cityName} to Itinerary.`, 'ok');
+    },
+    'ok'
+  );
 }
 
 function addAccommodation(cityId) {
@@ -3833,6 +3847,31 @@ function toast(msg, kind) {
   _toastTimer = setTimeout(() => {
     el.className = 'toast' + (kind ? ' ' + kind : '');
   }, kind === 'error' ? 4500 : 3000);
+}
+
+// Toast with a clickable action (e.g., "Undo"). Stays longer to give user time to react.
+function toastWithAction(msg, actionLabel, actionFn, kind) {
+  const el = document.getElementById('toast');
+  if (!el) { console.log('[toast]', msg); return; }
+  el.innerHTML = '';
+  const text = document.createElement('span');
+  text.textContent = msg + ' · ';
+  el.appendChild(text);
+  const btn = document.createElement('a');
+  btn.href = '#';
+  btn.textContent = actionLabel;
+  btn.style.cssText = 'color: var(--accent-soft); text-decoration: underline; cursor: pointer; margin-left: 4px';
+  btn.onclick = (e) => {
+    e.preventDefault();
+    actionFn();
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+  };
+  el.appendChild(btn);
+  el.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+  }, 8000); // longer window for undo
 }
 
 // armConfirm: replacement for blocking confirm() — first click arms, second click within timeout fires
