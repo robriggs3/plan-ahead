@@ -613,6 +613,151 @@
   .map-reset-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
   .map-reset-btn:disabled { display: none; }
 
+  /* SCORING */
+  .score-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 999px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+    cursor: pointer; user-select: none; transition: opacity 0.15s;
+  }
+  .score-badge:hover { opacity: 0.85; }
+  .score-badge.green { background: var(--green-soft); color: var(--green); }
+  .score-badge.amber { background: var(--amber-soft); color: var(--amber); }
+  .score-badge.orange { background: #fde0c2; color: #b06a1e; }
+  .score-badge.red { background: var(--red-soft); color: var(--red); }
+  .score-badge.gray { background: var(--bg-soft); color: var(--text-3); }
+
+  .score-modal-content { font-size: 14px; }
+  .score-composite {
+    text-align: center; padding: 20px 0 24px;
+    border-bottom: 1px solid var(--border-light); margin-bottom: 20px;
+  }
+  .score-composite .label {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 8px;
+  }
+  .score-composite .value {
+    font-family: 'Fraunces', Georgia, serif; font-size: 56px; font-weight: 500; line-height: 1;
+  }
+  .score-composite .value.green { color: var(--green); }
+  .score-composite .value.amber { color: var(--amber); }
+  .score-composite .value.orange { color: #b06a1e; }
+  .score-composite .value.red { color: var(--accent); }
+  .score-composite .value.gray { color: var(--text-3); }
+  .score-composite .sub { color: var(--text-3); font-size: 12px; margin-top: 8px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  .score-component {
+    display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: center;
+    padding: 12px 0; border-bottom: 1px solid var(--border-light);
+  }
+  .score-component:last-child { border-bottom: none; }
+  .score-component .icon { font-size: 20px; }
+  .score-component .label { font-weight: 500; }
+  .score-component .note { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .score-component .bar-wrap {
+    margin-top: 6px; height: 4px; background: var(--bg-soft); border-radius: 999px; overflow: hidden;
+  }
+  .score-component .bar {
+    height: 100%; border-radius: 999px; transition: width 0.4s;
+  }
+  .score-component .bar.green { background: var(--green); }
+  .score-component .bar.amber { background: var(--amber); }
+  .score-component .bar.orange { background: #b06a1e; }
+  .score-component .bar.red { background: var(--accent); }
+  .score-component .num {
+    font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; min-width: 50px; text-align: right;
+  }
+  .score-component .num.green { color: var(--green); }
+  .score-component .num.amber { color: var(--amber); }
+  .score-component .num.orange { color: #b06a1e; }
+  .score-component .num.red { color: var(--accent); }
+  .score-component .num.gray { color: var(--text-3); font-size: 14px; font-family: 'JetBrains Mono', monospace; }
+
+  /* VIEW TOGGLE */
+  .view-toggle {
+    display: inline-flex; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+  }
+  .view-toggle button {
+    background: transparent; border: none; padding: 6px 14px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-2); cursor: pointer; transition: all 0.15s;
+  }
+  .view-toggle button.active {
+    background: var(--text); color: white;
+  }
+  .view-toggle button:not(.active):hover {
+    background: var(--bg-softer);
+  }
+
+  /* BOARD VIEW */
+  .board-container {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 8px;
+  }
+  .board {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 260px;
+    gap: 12px;
+    align-items: start;
+  }
+  .board-column {
+    background: var(--bg-soft);
+    border-radius: 12px;
+    padding: 12px;
+    min-height: 200px;
+  }
+  .board-column.backlog { background: var(--amber-soft); }
+  .board-column-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border-light);
+    margin-bottom: 10px;
+  }
+  .board-column-head .title {
+    font-family: 'Fraunces', Georgia, serif; font-size: 15px; font-weight: 500;
+  }
+  .board-column-head .count {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .board-card {
+    background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;
+    padding: 10px 12px; margin-bottom: 8px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .board-card:hover { box-shadow: var(--shadow); border-color: var(--accent); }
+  .board-card.past { opacity: 0.7; }
+  .board-card.has-issue { border-left: 3px solid var(--amber); }
+  .board-card.has-alert { border-left: 3px solid var(--red); }
+  .board-card .name {
+    font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 14px;
+    margin-bottom: 4px;
+  }
+  .board-card .meta {
+    font-size: 11px; color: var(--text-3); margin-bottom: 6px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
+  }
+  .board-card .row {
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    font-size: 11px; margin-top: 6px;
+  }
+  .board-card .pills { display: flex; gap: 4px; flex-wrap: wrap; }
+  .board-card .pills .pill { font-size: 9px; padding: 2px 6px; }
+  .board-card .score {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    padding: 2px 8px; border-radius: 999px; font-weight: 500;
+  }
+  .board-empty {
+    color: var(--text-3); font-style: italic; font-size: 12px; padding: 12px 4px;
+  }
+  .view-controls {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  }
+
   /* LAT/LNG ROW */
   .latlng-row {
     display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end;
@@ -698,20 +843,38 @@
   <section class="section">
     <div class="section-head">
       <h2>Itinerary</h2>
+      <div class="view-controls">
+        <div class="view-toggle">
+          <button id="view-list-btn" class="active" onclick="setView('list')">List</button>
+          <button id="view-board-btn" onclick="setView('board')">Board</button>
+        </div>
+        <div class="view-toggle" id="board-granularity" style="display:none">
+          <button id="gran-month-btn" onclick="setGranularity('month')">Month</button>
+          <button id="gran-quarter-btn" class="active" onclick="setGranularity('quarter')">Quarter</button>
+        </div>
+      </div>
       <div class="meta" id="itinerary-meta">—</div>
     </div>
 
-    <div class="add-city-row">
-      <input class="text-input" id="add-city-name" placeholder="City (e.g. Sarandë)">
-      <select class="select-input" id="add-city-country" title="Country">
-        <option value="">Country</option>
-      </select>
-      <input class="date-input" type="date" id="add-city-checkin" title="Check-in">
-      <input class="date-input" type="date" id="add-city-checkout" title="Check-out">
-      <button class="btn" onclick="addCity()">Add</button>
+    <div id="view-list-wrap">
+      <div class="add-city-row">
+        <input class="text-input" id="add-city-name" placeholder="City (e.g. Sarandë)">
+        <select class="select-input" id="add-city-country" title="Country">
+          <option value="">Country</option>
+        </select>
+        <input class="date-input" type="date" id="add-city-checkin" title="Check-in">
+        <input class="date-input" type="date" id="add-city-checkout" title="Check-out">
+        <button class="btn" onclick="addCity()">Add</button>
+      </div>
+
+      <div class="city-list" id="city-list"></div>
     </div>
 
-    <div class="city-list" id="city-list"></div>
+    <div id="view-board-wrap" style="display:none">
+      <div class="board-container">
+        <div class="board" id="board"></div>
+      </div>
+    </div>
   </section>
 
   <!-- IDEAS -->
@@ -840,6 +1003,21 @@
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closePasteImport()">Cancel</button>
       <button class="btn-secondary green" onclick="importFromPaste()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCORE MODAL -->
+<div class="modal-bg" id="score-modal-bg" onclick="if(event.target===this)closeScoreModal()">
+  <div class="modal" style="max-width:620px">
+    <h3 id="score-modal-title">Score this destination</h3>
+    <div class="modal-sub" id="score-modal-sub"></div>
+    <div class="score-modal-content" id="score-modal-content"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeScoreModal()">Close</button>
+      <button class="btn-secondary" id="score-objective-btn" onclick="runObjectiveScore()">⚙️ Score objective (Schengen + Proximity + Climate)</button>
+      <button class="btn-secondary green" id="score-ai-btn" onclick="runFullScoreAI()">⚡ Run AI assessment (Budget + Culture)</button>
+      <button class="btn-secondary" id="score-copy-btn" onclick="copyScorePrompt()">📋 Copy prompt</button>
     </div>
   </div>
 </div>
@@ -1067,6 +1245,8 @@ function defaultState() {
     mapFilter: 'all',
     mapFrom: '',
     mapTo: '',
+    view: 'list',
+    boardGranularity: 'quarter',
     lastSession: ''
   };
 }
@@ -1611,6 +1791,13 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
   if (city.estimatedCost) cityCost += Number(city.estimatedCost) || 0;
   (city.accommodations||[]).forEach(a => { if (a.cost && (a.status === 'booked' || !a.status)) cityCost += Number(a.cost) || 0; });
 
+  // Score badge
+  const composite = city.scores ? computeComposite(city.scores) : null;
+  const scoreCls = scoreColorClass(composite);
+  const scoreBadge = composite != null
+    ? `<span class="score-badge ${scoreCls}" onclick="event.stopPropagation();openScoreModal('${capturedId}')" title="Click for breakdown">★ ${composite}%</span>`
+    : `<span class="score-badge gray" onclick="event.stopPropagation();openScoreModal('${capturedId}')" title="Click to score">Score —</span>`;
+
   // Header
   const header = document.createElement('div');
   header.className = 'city-header';
@@ -1619,6 +1806,7 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
       <div class="city-title-row">
         <span class="city-name">${escapeHTML(city.name || '(unnamed)')}</span>
         <span class="city-country">${escapeHTML(city.country || '—')}${isSchengen(city.country) ? ' · Schengen' : ''}</span>
+        ${scoreBadge}
       </div>
       <div class="city-dates">${fmtDate(city.checkIn)} → ${fmtDate(city.checkOut)} · ${nights} night${nights===1?'':'s'}</div>
     </div>
@@ -3194,6 +3382,211 @@ function buildPopup(c, kind) {
   </div>`;
 }
 
+// ==================== SCORING ====================
+
+// Haversine distance between two lat/lng points in km
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function scoreSchengen(city) {
+  if (!isSchengen(city.country)) return { score: 100, note: 'Non-Schengen — no impact on 90/180 counter.' };
+  if (!city.checkOut) return { score: null, note: 'No checkout date yet.' };
+  const lastNight = new Date(parseDate(city.checkOut));
+  lastNight.setDate(lastNight.getDate() - 1);
+  const dStr = lastNight.toISOString().slice(0,10);
+  const days = schengenDaysUsedAt(dStr);
+  if (days > 90) return { score: 0, note: `⛔ Visa violation: ${days}/90 days at end of stay.` };
+  if (days > 85) return { score: 30, note: `⚠️ Critical: ${days}/90 days. Very tight margin.` };
+  if (days > 75) return { score: 60, note: `${days}/90 days. Limited Schengen flexibility ahead.` };
+  if (days > 60) return { score: 85, note: `${days}/90 days. Still room for more Schengen.` };
+  return { score: 100, note: `${days}/90 days. Plenty of Schengen room.` };
+}
+
+function scoreProximity(city) {
+  if (city.lat == null || city.lat === '') return { score: null, note: 'No coordinates yet. Add lat/lng to score.' };
+  const myLat = parseFloat(city.lat);
+  const myLng = parseFloat(city.lng);
+  const sorted = sortedCities();
+  const idx = sorted.findIndex(c => c.id === city.id);
+
+  let prevCity = null, prevDist = null;
+  for (let i = idx - 1; i >= 0; i--) {
+    const c = sorted[i];
+    if (c.lat != null && c.lat !== '') {
+      prevCity = c;
+      prevDist = haversineKm(parseFloat(c.lat), parseFloat(c.lng), myLat, myLng);
+      break;
+    }
+  }
+  let nextCity = null, nextDist = null;
+  for (let i = idx + 1; i < sorted.length; i++) {
+    const c = sorted[i];
+    if (c.lat != null && c.lat !== '') {
+      nextCity = c;
+      nextDist = haversineKm(myLat, myLng, parseFloat(c.lat), parseFloat(c.lng));
+      break;
+    }
+  }
+
+  const dists = [prevDist, nextDist].filter(d => d !== null);
+  if (dists.length === 0) return { score: 90, note: 'No adjacent cities with coords to compare.' };
+  const avg = dists.reduce((a,b) => a+b, 0) / dists.length;
+  let score;
+  if (avg < 500) score = 100;
+  else if (avg < 2000) score = 90;
+  else if (avg < 5000) score = 70;
+  else if (avg < 10000) score = 50;
+  else score = 30;
+
+  const parts = [];
+  if (prevCity) parts.push(`${Math.round(prevDist).toLocaleString()}km from ${prevCity.name}`);
+  if (nextCity) parts.push(`${Math.round(nextDist).toLocaleString()}km to ${nextCity.name}`);
+  return { score, note: parts.join(' · ') };
+}
+
+function scoreClimateFromData(avgHigh, avgHumidity) {
+  let temp = 100;
+  if (avgHigh > 30) temp = Math.max(20, 100 - (avgHigh - 27) * 10);
+  else if (avgHigh > 27) temp = 100 - (avgHigh - 27) * 8;
+  else if (avgHigh < 18) temp = 100 - (22 - avgHigh) * 6;
+  else if (avgHigh < 22) temp = 100 - (22 - avgHigh) * 4;
+
+  let humPenalty = 0;
+  if (avgHumidity != null) {
+    if (avgHumidity > 80) humPenalty = 35;
+    else if (avgHumidity > 70) humPenalty = 20;
+    else if (avgHumidity > 60) humPenalty = 5;
+  }
+  return Math.max(0, Math.min(100, Math.round(temp - humPenalty)));
+}
+
+async function fetchClimateData(city) {
+  if (!city.lat || !city.lng || !city.checkIn || !city.checkOut) return null;
+  // Use last year same date range for historical baseline
+  const cIn = parseDate(city.checkIn);
+  const cOut = parseDate(city.checkOut);
+  const lastYear = cIn.getFullYear() - 1;
+  const pad = n => String(n).padStart(2,'0');
+  const startStr = `${lastYear}-${pad(cIn.getMonth()+1)}-${pad(cIn.getDate())}`;
+  const endStr = `${lastYear}-${pad(cOut.getMonth()+1)}-${pad(cOut.getDate())}`;
+  try {
+    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${city.lat}&longitude=${city.lng}&start_date=${startStr}&end_date=${endStr}&daily=temperature_2m_max,relative_humidity_2m_mean&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const maxes = (data.daily?.temperature_2m_max || []).filter(v => v != null);
+    const hums = (data.daily?.relative_humidity_2m_mean || []).filter(v => v != null);
+    if (maxes.length === 0) return null;
+    const avgHigh = maxes.reduce((a,b) => a+b, 0) / maxes.length;
+    const avgHum = hums.length > 0 ? hums.reduce((a,b) => a+b, 0) / hums.length : null;
+    return { avgHigh, avgHum, source: 'open-meteo' };
+  } catch(e) {
+    console.warn('Climate fetch failed:', e.message);
+    return null;
+  }
+}
+
+async function scoreClimate(city) {
+  if (!city.checkIn || !city.checkOut) return { score: null, note: 'Need dates to score climate.' };
+  const data = await fetchClimateData(city);
+  if (!data) return { score: null, note: 'Climate data unavailable (network or sandbox restriction). Run AI assessment for climate analysis.' };
+  const score = scoreClimateFromData(data.avgHigh, data.avgHum);
+  const humStr = data.avgHum != null ? `, ${Math.round(data.avgHum)}% humidity` : '';
+  return { score, note: `Avg high ${data.avgHigh.toFixed(1)}°C${humStr} (historical, same dates).`, data };
+}
+
+// Composite weights — climate + culture matter most per profile, schengen is critical
+const SCORE_WEIGHTS = { climate: 0.30, schengen: 0.25, proximity: 0.10, budget: 0.15, culture: 0.20 };
+
+function computeComposite(scores) {
+  if (!scores) return null;
+  // Hard fail for Schengen violation
+  if (scores.schengen && scores.schengen.score === 0) return 0;
+  const present = Object.keys(SCORE_WEIGHTS).filter(k => scores[k] && scores[k].score != null);
+  if (present.length === 0) return null;
+  const totalWeight = present.reduce((sum, k) => sum + SCORE_WEIGHTS[k], 0);
+  const weighted = present.reduce((sum, k) => sum + (scores[k].score * SCORE_WEIGHTS[k] / totalWeight), 0);
+  return Math.round(weighted);
+}
+
+function scoreColorClass(s) {
+  if (s == null) return 'gray';
+  if (s >= 80) return 'green';
+  if (s >= 60) return 'amber';
+  if (s >= 40) return 'orange';
+  return 'red';
+}
+
+// Build the AI prompt for full assessment (budget + culture, plus optional climate fallback)
+function buildCityScorePrompt(city) {
+  const nights = cityNights(city);
+  const lines = [];
+  lines.push("You are scoring a destination against a traveler's profile. Return ONLY valid JSON, no preamble, no markdown fences.");
+  lines.push("");
+  lines.push("## Traveler's profile");
+  lines.push(state.profile);
+  lines.push("");
+  lines.push("## Destination details");
+  lines.push(`- City: ${city.name}`);
+  lines.push(`- Country: ${city.country || 'unknown'}`);
+  lines.push(`- Stay: ${city.checkIn || '?'} → ${city.checkOut || '?'} (${nights} night${nights===1?'':'s'})`);
+  if (city.estimatedCost) lines.push(`- Estimated cost: $${city.estimatedCost} USD`);
+  if (city.notes) lines.push(`- Notes: ${city.notes}`);
+  lines.push("");
+  lines.push("## Task");
+  lines.push("Score this destination on TWO dimensions, 0-100 each:");
+  lines.push("");
+  lines.push("**budget**: How well does the destination fit the traveler's affordability needs? Consider typical accommodation, food, transport costs for nomads in this city, vs their stated estimated cost (if given) and budget signals in their profile.");
+  lines.push("");
+  lines.push("**culture**: How well does this destination match their cultural/lifestyle profile? Consider: tourist-vs-local balance, expat scene, walkability, attractions, vibe, language compatibility, anything they flagged as want/avoid.");
+  lines.push("");
+  lines.push("Also assess climate IF the historical climate score is not provided. If climate is provided in 'pre_computed', do NOT re-score it.");
+  lines.push("");
+  lines.push("Output schema:");
+  lines.push('{"budget": {"score": 0-100, "note": "1 sentence reasoning"}, "culture": {"score": 0-100, "note": "1 sentence reasoning"}, "climate": {"score": 0-100, "note": "1 sentence reasoning"} (only if pre-computed missing)}');
+  lines.push("");
+  lines.push("Be honest. If a destination violates a hard constraint, score it low and say why.");
+  return lines.join("\n");
+}
+
+async function runAICityScore(city) {
+  if (state.aiMode !== 'api' || !state.apiKey) return null;
+  try {
+    const prompt = buildCityScorePrompt(city);
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error('API error (' + res.status + '): ' + errText.slice(0, 200));
+    }
+    const data = await res.json();
+    const text = (data.content || []).map(b => b.text || '').join('').trim();
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    return JSON.parse(cleaned);
+  } catch(e) {
+    console.warn('AI city score failed:', e.message);
+    throw e;
+  }
+}
+
 function resetMapView() {
   if (!_map) return;
   const range = getMapFilterRange();
@@ -3280,6 +3673,373 @@ function onMapDateChange() {
   renderMap();
 }
 
+// ==================== BOARD VIEW ====================
+
+function setView(view) {
+  state.view = view;
+  saveState();
+  applyView();
+}
+
+function setGranularity(g) {
+  state.boardGranularity = g;
+  saveState();
+  applyView();
+}
+
+function applyView() {
+  const isBoard = state.view === 'board';
+  document.getElementById('view-list-wrap').style.display = isBoard ? 'none' : 'block';
+  document.getElementById('view-board-wrap').style.display = isBoard ? 'block' : 'none';
+  document.getElementById('view-list-btn').classList.toggle('active', !isBoard);
+  document.getElementById('view-board-btn').classList.toggle('active', isBoard);
+  document.getElementById('board-granularity').style.display = isBoard ? 'inline-flex' : 'none';
+  document.getElementById('gran-month-btn').classList.toggle('active', state.boardGranularity === 'month');
+  document.getElementById('gran-quarter-btn').classList.toggle('active', state.boardGranularity === 'quarter');
+  if (isBoard) renderBoard();
+}
+
+// Determine which bucket(s) a city falls into. Returns array of bucket keys (a city
+// spanning two months/quarters belongs to both).
+function cityBuckets(city, granularity) {
+  if (!city.checkIn || !city.checkOut) return ['backlog'];
+  const start = parseDate(city.checkIn);
+  const end = parseDate(city.checkOut);
+  const buckets = new Set();
+  const cur = new Date(start);
+  while (cur <= end) {
+    buckets.add(bucketKey(cur, granularity));
+    // advance by 1 day for month/quarter granularity (only crosses on boundaries)
+    cur.setDate(cur.getDate() + 1);
+  }
+  return Array.from(buckets);
+}
+
+function bucketKey(date, granularity) {
+  const y = date.getFullYear();
+  const m = date.getMonth(); // 0-11
+  if (granularity === 'month') {
+    return y + '-' + String(m+1).padStart(2,'0');
+  } else { // quarter
+    const q = Math.floor(m / 3) + 1;
+    return y + '-Q' + q;
+  }
+}
+
+function bucketLabel(key, granularity) {
+  if (key === 'backlog') return 'Backlog';
+  const [y, rest] = key.split('-');
+  if (granularity === 'month') {
+    const monthIdx = parseInt(rest, 10) - 1;
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return monthNames[monthIdx] + ' ' + y;
+  } else {
+    return rest + ' ' + y;
+  }
+}
+
+function renderBoard() {
+  const board = document.getElementById('board');
+  if (!board) return;
+  const granularity = state.boardGranularity || 'quarter';
+  const todayStr = todayISO();
+
+  // Group cities by bucket
+  const groups = {};
+  const backlog = [];
+  state.cities.forEach(city => {
+    const buckets = cityBuckets(city, granularity);
+    if (buckets[0] === 'backlog') {
+      backlog.push(city);
+    } else {
+      buckets.forEach(b => {
+        if (!groups[b]) groups[b] = [];
+        groups[b].push(city);
+      });
+    }
+  });
+
+  // Get all bucket keys, sorted
+  const keys = Object.keys(groups).sort();
+
+  // If no buckets and no backlog, show empty
+  if (keys.length === 0 && backlog.length === 0) {
+    board.innerHTML = '<div class="board-empty" style="padding:24px">No cities yet. Add cities in List view to populate the board.</div>';
+    return;
+  }
+
+  const issues = detectIssues();
+  const issueCityIds = new Set(issues.flatMap(i => i.cityIds));
+  const alertCityIds = new Set(issues.filter(i => i.severity === 'alert').flatMap(i => i.cityIds));
+
+  let html = '';
+
+  // Backlog column (only if there are backlog items)
+  if (backlog.length > 0) {
+    html += renderBoardColumn('backlog', 'Backlog', backlog, granularity, issueCityIds, alertCityIds, todayStr);
+  }
+
+  // Time columns
+  keys.forEach(key => {
+    html += renderBoardColumn(key, bucketLabel(key, granularity), groups[key], granularity, issueCityIds, alertCityIds, todayStr);
+  });
+
+  board.innerHTML = html;
+}
+
+function renderBoardColumn(key, label, cities, granularity, issueIds, alertIds, todayStr) {
+  const isBacklog = key === 'backlog';
+  let html = `<div class="board-column ${isBacklog ? 'backlog' : ''}">
+    <div class="board-column-head">
+      <span class="title">${escapeHTML(label)}</span>
+      <span class="count">${cities.length} cit${cities.length===1?'y':'ies'}</span>
+    </div>`;
+
+  if (cities.length === 0) {
+    html += '<div class="board-empty">Empty</div>';
+  } else {
+    // Sort cities within column by check-in date
+    cities.sort((a, b) => (a.checkIn || '9999').localeCompare(b.checkIn || '9999'));
+    cities.forEach(city => {
+      let cardCls = 'board-card';
+      if (city.checkOut && city.checkOut < todayStr) cardCls += ' past';
+      if (alertIds.has(city.id)) cardCls += ' has-alert';
+      else if (issueIds.has(city.id)) cardCls += ' has-issue';
+
+      const composite = city.scores ? computeComposite(city.scores) : null;
+      const scoreCls = scoreColorClass(composite);
+      const scoreEl = composite != null
+        ? `<span class="score ${scoreCls}" style="background:var(--bg-softer);">${composite}%</span>`
+        : '';
+
+      const nights = cityNights(city);
+      const statusPill = city.status && city.status !== 'tentative'
+        ? `<span class="pill ${city.status}">${city.status}</span>`
+        : '';
+
+      html += `<div class="${cardCls}" onclick="openCityFromBoard('${city.id}')">
+        <div class="name">${escapeHTML(city.name || '(unnamed)')}</div>
+        <div class="meta">${escapeHTML(city.country || '—')} · ${fmtDateShort(city.checkIn)}–${fmtDateShort(city.checkOut)} · ${nights}n</div>
+        <div class="row">
+          <div class="pills">${statusPill}</div>
+          ${scoreEl}
+        </div>
+      </div>`;
+    });
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function openCityFromBoard(cityId) {
+  // Switch to list view, expand the city, scroll to it
+  state.view = 'list';
+  openCityIds.add(cityId);
+  saveState();
+  applyView();
+  renderCities();
+  // Scroll to the city card after render
+  setTimeout(() => {
+    const cards = document.querySelectorAll('#city-list .city');
+    cards.forEach(card => {
+      // Match by name in header (rough but works)
+      const titleEl = card.querySelector('.city-name');
+      const city = state.cities.find(c => c.id === cityId);
+      if (city && titleEl && titleEl.textContent === (city.name || '(unnamed)')) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }, 100);
+}
+
+// ==================== SCORE MODAL ====================
+
+let _scoreCityId = null;
+
+function openScoreModal(cityId) {
+  const city = state.cities.find(c => c.id === cityId);
+  if (!city) return;
+  _scoreCityId = cityId;
+  document.getElementById('score-modal-title').textContent = 'Score: ' + (city.name || '(unnamed)');
+  document.getElementById('score-modal-sub').textContent =
+    (city.country || '—') + ' · ' + fmtDateShort(city.checkIn) + ' → ' + fmtDateShort(city.checkOut);
+
+  // Show/hide AI button based on config
+  const aiBtn = document.getElementById('score-ai-btn');
+  if (state.aiMode === 'api' && state.apiKey) {
+    aiBtn.disabled = false;
+    aiBtn.textContent = '⚡ Run AI assessment (Budget + Culture)';
+  } else {
+    aiBtn.disabled = true;
+    aiBtn.textContent = '⚡ AI assessment (configure API key first)';
+  }
+
+  renderScoreContent(city);
+  document.getElementById('score-modal-bg').classList.add('show');
+}
+
+function closeScoreModal() {
+  document.getElementById('score-modal-bg').classList.remove('show');
+  _scoreCityId = null;
+}
+
+function renderScoreContent(city) {
+  const scores = city.scores || {};
+  const composite = computeComposite(scores);
+  const compositeCls = scoreColorClass(composite);
+  const container = document.getElementById('score-modal-content');
+
+  const components = [
+    { key: 'climate', label: 'Climate fit', icon: '🌡️', weight: '30%' },
+    { key: 'schengen', label: 'Schengen impact', icon: '🛂', weight: '25%' },
+    { key: 'culture', label: 'Cultural fit', icon: '🎭', weight: '20%' },
+    { key: 'budget', label: 'Budget feasibility', icon: '💵', weight: '15%' },
+    { key: 'proximity', label: 'Proximity (travel time)', icon: '✈️', weight: '10%' }
+  ];
+
+  let html = `
+    <div class="score-composite">
+      <div class="label">Composite score</div>
+      <div class="value ${compositeCls}">${composite != null ? composite + '%' : '—'}</div>
+      <div class="sub">${composite != null ? 'Weighted across components' : 'Run scoring below to compute'}</div>
+    </div>
+  `;
+
+  components.forEach(comp => {
+    const s = scores[comp.key];
+    const score = s ? s.score : null;
+    const cls = scoreColorClass(score);
+    const note = s && s.note ? s.note : '<em style="color:var(--text-3)">Not yet scored</em>';
+    html += `
+      <div class="score-component">
+        <div class="icon">${comp.icon}</div>
+        <div>
+          <div class="label">${comp.label} <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);font-weight:normal">· ${comp.weight}</span></div>
+          <div class="note">${note}</div>
+          <div class="bar-wrap"><div class="bar ${cls}" style="width:${score != null ? score : 0}%"></div></div>
+        </div>
+        <div class="num ${cls}">${score != null ? score : '—'}</div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+async function runObjectiveScore() {
+  const city = state.cities.find(c => c.id === _scoreCityId);
+  if (!city) return;
+  const btn = document.getElementById('score-objective-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Computing…';
+
+  if (!city.scores) city.scores = {};
+  city.scores.schengen = scoreSchengen(city);
+  city.scores.proximity = scoreProximity(city);
+  city.scores.climate = await scoreClimate(city);
+  city.scores.computedAt = new Date().toISOString();
+
+  saveState();
+  renderScoreContent(city);
+  renderCities();
+  btn.disabled = false;
+  btn.textContent = '⚙️ Re-score objective';
+  toast('Objective scores computed.', 'ok');
+}
+
+async function runFullScoreAI() {
+  const city = state.cities.find(c => c.id === _scoreCityId);
+  if (!city) return;
+  if (state.aiMode !== 'api' || !state.apiKey) {
+    toast('Configure API key in Settings, or use Copy prompt.', 'error');
+    return;
+  }
+  const btn = document.getElementById('score-ai-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running AI…';
+
+  try {
+    // First: ensure objective scores exist
+    if (!city.scores) city.scores = {};
+    if (!city.scores.schengen) city.scores.schengen = scoreSchengen(city);
+    if (!city.scores.proximity) city.scores.proximity = scoreProximity(city);
+    if (!city.scores.climate || city.scores.climate.score == null) {
+      city.scores.climate = await scoreClimate(city);
+    }
+    const aiResult = await runAICityScore(city);
+    if (aiResult) {
+      if (aiResult.budget) city.scores.budget = aiResult.budget;
+      if (aiResult.culture) city.scores.culture = aiResult.culture;
+      // If climate still null and AI returned one, use it
+      if ((!city.scores.climate || city.scores.climate.score == null) && aiResult.climate) {
+        city.scores.climate = aiResult.climate;
+      }
+      city.scores.computedAt = new Date().toISOString();
+      saveState();
+      renderScoreContent(city);
+      renderCities();
+      toast('AI assessment complete.', 'ok');
+    }
+  } catch(err) {
+    toast('AI assessment failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ Re-run AI assessment';
+  }
+}
+
+function copyScorePrompt() {
+  const city = state.cities.find(c => c.id === _scoreCityId);
+  if (!city) return;
+  const prompt = buildCityScorePrompt(city);
+  navigator.clipboard.writeText(prompt).then(() => {
+    toast('Prompt copied. Paste into Claude.ai, then paste JSON response back here.', 'ok');
+    // Show input area
+    const container = document.getElementById('score-modal-content');
+    if (!document.getElementById('score-paste-back')) {
+      const paste = document.createElement('div');
+      paste.id = 'score-paste-back';
+      paste.style.cssText = 'margin-top:16px;padding-top:16px;border-top:1px solid var(--border-light)';
+      paste.innerHTML = `
+        <label style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:6px;display:block">Paste AI's JSON response</label>
+        <textarea class="modal-textarea" id="score-paste-area" style="min-height:120px" placeholder='{"budget": {...}, "culture": {...}}'></textarea>
+        <button class="btn-secondary green" style="margin-top:8px" onclick="applyPastedScore()">Apply scores</button>
+      `;
+      container.appendChild(paste);
+    }
+  }).catch(err => toast('Copy failed: ' + err.message, 'error'));
+}
+
+function applyPastedScore() {
+  const city = state.cities.find(c => c.id === _scoreCityId);
+  if (!city) return;
+  const text = document.getElementById('score-paste-area').value.trim();
+  if (!text) { toast('Paste JSON first.', 'error'); return; }
+  let parsed;
+  try {
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    parsed = JSON.parse(cleaned);
+  } catch(err) {
+    toast('Could not parse JSON: ' + err.message, 'error');
+    return;
+  }
+  if (!city.scores) city.scores = {};
+  // Backfill objective if not yet computed
+  if (!city.scores.schengen) city.scores.schengen = scoreSchengen(city);
+  if (!city.scores.proximity) city.scores.proximity = scoreProximity(city);
+  if (parsed.budget) city.scores.budget = parsed.budget;
+  if (parsed.culture) city.scores.culture = parsed.culture;
+  if (parsed.climate && (!city.scores.climate || city.scores.climate.score == null)) {
+    city.scores.climate = parsed.climate;
+  }
+  city.scores.computedAt = new Date().toISOString();
+  saveState();
+  renderScoreContent(city);
+  renderCities();
+  toast('Scores applied.', 'ok');
+}
+
 // ==================== RENDER ALL ====================
 
 function renderAll() {
@@ -3303,6 +4063,8 @@ function renderAll() {
   renderNow();
   renderCounters();
   renderCities();
+  if (state.view === 'board') renderBoard();
+  applyView();
   renderIdeas();
   renderProfile();
   renderSettings();
