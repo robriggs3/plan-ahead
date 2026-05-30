@@ -187,7 +187,7 @@
   .warning {
     background: var(--amber-soft); border: 1px solid var(--amber); border-radius: 8px;
     padding: 10px 14px; font-size: 13px; color: var(--amber);
-    display: flex; gap: 10px; align-items: flex-start;
+    display: flex; gap: 10px; align-items: center;
   }
   .warning.alert {
     background: var(--red-soft); border-color: var(--red); color: var(--red);
@@ -539,7 +539,9 @@
   }
   .map-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
   .map-legend .dot.past { background: #888; }
-  .map-legend .dot.now { background: var(--accent); }
+  .map-legend .dot.now { background: var(--accent); border: 2px solid #9c181d; }
+  .map-legend .dot.future-booked { background: var(--accent); }
+  .map-legend .dot.future-shortlisted { background: var(--accent-soft); border: 2px solid var(--accent); }
   .map-legend .dot.future { background: white; border: 2px solid var(--accent); }
   .map-legend .dot.idea { background: var(--blue); }
 
@@ -774,6 +776,12 @@
   .drag-handle:hover { color: var(--accent); }
   .accom-item.dragging { opacity: 0.4; }
   .accom-item.drop-target { border-top: 3px solid var(--accent); }
+
+  .city.dragging { opacity: 0.4; }
+  .city.drop-above { box-shadow: 0 -3px 0 var(--accent); }
+  .city.drop-below { box-shadow: 0 3px 0 var(--accent); }
+  .city:not(.past) .city-header { cursor: grab; }
+  .city:not(.past) .city-header:active { cursor: grabbing; }
   .board-card .name {
     font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 14px;
     margin-bottom: 4px;
@@ -864,8 +872,10 @@
       <div class="map-empty" id="map-empty" style="display:none">Add cities with coordinates to see them on the map.</div>
       <div class="map-legend">
         <div><span class="dot past"></span>Past</div>
-        <div><span class="dot now"></span>Current</div>
-        <div><span class="dot future"></span>Future</div>
+        <div><span class="dot now"></span>Now</div>
+        <div><span class="dot future-booked"></span>Booked</div>
+        <div><span class="dot future-shortlisted"></span>Shortlisted</div>
+        <div><span class="dot future"></span>Tentative</div>
         <div><span class="dot idea"></span>Idea</div>
       </div>
     </div>
@@ -978,6 +988,15 @@
             <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">AI usage</div>
             <div id="ai-usage-display"><span style="color:var(--text-3)">No AI usage today.</span></div>
           </div>
+        </div>
+      </div>
+
+      <div class="setting-card">
+        <h3>Budget target</h3>
+        <label for="budget-target-input">Monthly target (USD)</label>
+        <input class="text-input" type="number" min="0" step="100" id="budget-target-input" style="width:100%" placeholder="e.g. 3000" oninput="setBudgetTarget(this.value)">
+        <div class="muted" style="margin-top:8px;font-size:12px;line-height:1.5">
+          Compares against your "Estimated total cost" averaged per month. Treat each city's <em>estimated cost</em> as the full all-in spend you plan there (housing + food + transit + activities). This isn't an expense tracker — it's a planning sanity check. For actual spend tracking, use a dedicated tool.
         </div>
       </div>
 
@@ -1322,8 +1341,36 @@ function defaultState() {
     view: 'list',
     boardGranularity: 'quarter',
     aiUsage: { date: '', inputTokens: 0, outputTokens: 0 },
+    dismissedGaps: [],
+    budgetMonthlyTarget: 0,
     lastSession: ''
   };
+}
+
+// Compute a stable signature for a gap between two cities
+function gapSignature(cityA, cityB) {
+  return cityA.id + '→' + cityB.id + ':' + (cityA.checkOut || '') + '|' + (cityB.checkIn || '');
+}
+
+function isGapDismissed(sig) {
+  return (state.dismissedGaps || []).includes(sig);
+}
+
+function dismissGap(sig, label) {
+  if (!state.dismissedGaps) state.dismissedGaps = [];
+  if (!state.dismissedGaps.includes(sig)) {
+    state.dismissedGaps.push(sig);
+    saveState();
+    renderAll();
+    toast(`Dismissed: ${label}`, 'ok');
+  }
+}
+
+function clearDismissedGaps() {
+  state.dismissedGaps = [];
+  saveState();
+  renderAll();
+  toast('Cleared all dismissed gaps.', 'ok');
 }
 
 function loadState() {
@@ -1472,23 +1519,59 @@ function cityNights(city) {
 }
 
 // Per-country totals
-function countryDayMap() {
+function countryDayMap(range) {
   const map = {};
   state.cities.forEach(c => {
     if (!c.country || !c.checkIn || !c.checkOut) return;
-    map[c.country] = (map[c.country] || 0) + cityNights(c);
+    if (range && !cityInRange(c, range)) return;
+    // If range is set, count overlap with range, not full city stay
+    let nights = cityNights(c);
+    if (range) {
+      const cIn = parseDate(c.checkIn);
+      const cOut = parseDate(c.checkOut);
+      const rFrom = parseDate(range.from);
+      const rTo = parseDate(range.to);
+      const overlapStart = cIn > rFrom ? cIn : rFrom;
+      const overlapEnd = cOut < rTo ? cOut : rTo;
+      nights = Math.max(0, Math.round((overlapEnd - overlapStart) / 86400000));
+    }
+    map[c.country] = (map[c.country] || 0) + nights;
   });
   return map;
 }
 
 // Per-US-state totals
-function stateDayMap() {
+function stateDayMap(range) {
   const map = {};
   state.cities.forEach(c => {
     if (!isUS(c.country) || !c.state || !c.checkIn || !c.checkOut) return;
-    map[c.state] = (map[c.state] || 0) + cityNights(c);
+    if (range && !cityInRange(c, range)) return;
+    let nights = cityNights(c);
+    if (range) {
+      const cIn = parseDate(c.checkIn);
+      const cOut = parseDate(c.checkOut);
+      const rFrom = parseDate(range.from);
+      const rTo = parseDate(range.to);
+      const overlapStart = cIn > rFrom ? cIn : rFrom;
+      const overlapEnd = cOut < rTo ? cOut : rTo;
+      nights = Math.max(0, Math.round((overlapEnd - overlapStart) / 86400000));
+    }
+    map[c.state] = (map[c.state] || 0) + nights;
   });
   return map;
+}
+
+// Human-readable label for the current map filter
+function getFilterLabel() {
+  const f = state.mapFilter;
+  const labels = {
+    'all': 'All time', 'past': 'Past', 'future': 'Upcoming', 'now-90': 'Next 90 days',
+    '2026': '2026', '2027': '2027',
+    '2026-q3': 'Q3 2026', '2026-q4': 'Q4 2026',
+    '2027-q1': 'Q1 2027', '2027-q2': 'Q2 2027', '2027-q3': 'Q3 2027', '2027-q4': 'Q4 2027',
+    'custom': state.mapFrom && state.mapTo ? `${state.mapFrom} → ${state.mapTo}` : 'Custom'
+  };
+  return labels[f] || f;
 }
 
 // Schengen rolling 90/180: for any given reference date, how many days in the prior 180 (inclusive) were Schengen?
@@ -1537,7 +1620,7 @@ function peakSchengenAhead() {
 // ==================== GAP / OVERLAP DETECTION ====================
 
 function detectIssues() {
-  const issues = []; // {cityId, type, message, severity}
+  const issues = []; // {cityId, type, message, severity, sig?, label?}
   const cities = sortedCities();
   for (let i = 0; i < cities.length - 1; i++) {
     const a = cities[i];
@@ -1554,10 +1637,14 @@ function detectIssues() {
         message: `Overlap: leaving ${a.name} ${fmtDateShort(a.checkOut)} but already in ${b.name} ${fmtDateShort(b.checkIn)} (${Math.abs(gap)} day${Math.abs(gap)===1?'':'s'} double-booked).`
       });
     } else if (gap > 0) {
+      const sig = gapSignature(a, b);
+      if (isGapDismissed(sig)) continue;
       issues.push({
         cityIds: [a.id, b.id],
         type: 'gap',
         severity: gap >= 2 ? 'alert' : 'warn',
+        sig,
+        label: `${gap}n gap, ${a.name} → ${b.name}`,
         message: `Gap: ${gap} night${gap===1?'':'s'} between leaving ${a.name} (${fmtDateShort(a.checkOut)}) and ${b.name} (${fmtDateShort(b.checkIn)}). Where are you sleeping?`
       });
     }
@@ -1580,10 +1667,14 @@ function detectIssues() {
           message: `In ${c.name}: ${accs[i].name||'an accommodation'} and ${accs[i+1].name||'another'} overlap by ${Math.abs(gap)} day${Math.abs(gap)===1?'':'s'}.`
         });
       } else if (gap > 0) {
+        const sig = 'accom:' + c.id + ':' + accs[i].id + '→' + accs[i+1].id;
+        if (isGapDismissed(sig)) continue;
         issues.push({
           cityIds: [c.id],
           type: 'accom-gap',
           severity: 'alert',
+          sig,
+          label: `${gap}n accom gap in ${c.name}`,
           message: `In ${c.name}: ${gap} night${gap===1?'':'s'} between ${accs[i].name||'accommodation'} (out ${fmtDateShort(accs[i].checkOut)}) and ${accs[i+1].name||'next'} (in ${fmtDateShort(accs[i+1].checkIn)}).`
         });
       }
@@ -1698,9 +1789,22 @@ function renderNow() {
   issues.forEach(iss => {
     const w = document.createElement('div');
     w.className = 'warning' + (iss.severity === 'alert' ? ' alert' : '');
-    w.innerHTML = `<span class="icon">${iss.severity === 'alert' ? '⚠' : '⚠'}</span><span>${escapeHTML(iss.message)}</span>`;
+    let html = `<span class="icon">${iss.severity === 'alert' ? '⚠' : '⚠'}</span><span style="flex:1">${escapeHTML(iss.message)}</span>`;
+    if (iss.sig) {
+      const sigJS = iss.sig.replace(/'/g, "\\'");
+      const labelJS = (iss.label || 'this gap').replace(/'/g, "\\'");
+      html += `<button class="btn-secondary" style="font-size:11px;padding:4px 10px;white-space:nowrap;margin-left:8px" onclick="dismissGap('${sigJS}', '${labelJS}')" title="Mark as in transit (sleeping on plane/car/etc.) — dismiss this gap alert">✓ In transit</button>`;
+    }
+    w.innerHTML = html;
     warnings.appendChild(w);
   });
+  // If any gaps are dismissed, show a small reset link
+  if ((state.dismissedGaps || []).length > 0) {
+    const resetRow = document.createElement('div');
+    resetRow.style.cssText = 'font-size:11px;color:var(--text-3);font-family:\'JetBrains Mono\',monospace;text-align:right;margin-top:4px';
+    resetRow.innerHTML = `${state.dismissedGaps.length} gap${state.dismissedGaps.length===1?'':'s'} dismissed · <a href="#" onclick="event.preventDefault();clearDismissedGaps()" style="color:var(--accent);text-decoration:none">Clear all</a>`;
+    warnings.appendChild(resetRow);
+  }
 }
 
 // ==================== COUNTERS ====================
@@ -1708,6 +1812,17 @@ function renderNow() {
 function renderCounters() {
   const container = document.getElementById('counters');
   container.innerHTML = '';
+
+  // Use the same timeline filter as the map. When 'all', use everything.
+  const range = getMapFilterRange();
+  const inRange = c => cityInRange(c, range) || !range;
+  // For accurate "in scope" set, include cities without dates only when filter is 'all'
+  const inScopeCities = range
+    ? state.cities.filter(c => c.checkIn && c.checkOut && cityInRange(c, range))
+    : state.cities;
+  const filterLabel = state.mapFilter && state.mapFilter !== 'all'
+    ? ` (filtered: ${getFilterLabel()})`
+    : '';
 
   // Schengen now
   const todayStr = todayISO();
@@ -1726,9 +1841,9 @@ function renderCounters() {
   `;
   container.appendChild(schCard);
 
-  // Total cost
+  // Total cost (respecting filter)
   let totalCost = 0;
-  state.cities.forEach(c => {
+  inScopeCities.forEach(c => {
     if (c.estimatedCost) totalCost += Number(c.estimatedCost) || 0;
     if (c.accommodations) {
       c.accommodations.forEach(a => {
@@ -1736,23 +1851,52 @@ function renderCounters() {
       });
     }
   });
+  // Compute span in months from earliest checkIn to latest checkOut among in-scope cities
+  let spanMonths = 0;
+  const dated = inScopeCities.filter(c => c.checkIn && c.checkOut);
+  if (dated.length > 0) {
+    const firstIn = dated.reduce((min, c) => c.checkIn < min ? c.checkIn : min, dated[0].checkIn);
+    const lastOut = dated.reduce((max, c) => c.checkOut > max ? c.checkOut : max, dated[0].checkOut);
+    const days = Math.max(1, Math.round((parseDate(lastOut) - parseDate(firstIn)) / 86400000));
+    spanMonths = days / 30.44;
+  }
+  const avgPerMonth = spanMonths > 0 ? totalCost / spanMonths : 0;
+  const target = state.budgetMonthlyTarget || 0;
+  let varianceLine = '';
+  if (target > 0 && spanMonths > 0.5) {
+    const delta = avgPerMonth - target;
+    const pctDelta = target > 0 ? (delta / target * 100) : 0;
+    const onTrack = delta <= target * 0.05; // within 5% counts as on-track
+    const isOver = delta > target * 0.05;
+    const cls = isOver ? 'alert' : (onTrack ? 'ok' : 'warn');
+    const color = cls === 'alert' ? 'var(--accent)' : (cls === 'ok' ? 'var(--green)' : 'var(--amber)');
+    const icon = isOver ? '⚠' : '✓';
+    const label = isOver
+      ? `Over target by ${fmtCurrency(Math.round(delta),'USD')}/mo (${Math.round(pctDelta)}%)`
+      : `Under target by ${fmtCurrency(Math.round(-delta),'USD')}/mo`;
+    varianceLine = `<div class="counter-sub" style="font-size:11px;margin-top:2px;color:${color};font-weight:500">${icon} ${label} (target ${fmtCurrency(target,'USD')}/mo)</div>`;
+  } else if (target === 0 && spanMonths > 0.5) {
+    varianceLine = `<div class="counter-sub" style="font-size:10px;margin-top:2px;color:var(--text-3)">Set a monthly target in Settings to track variance.</div>`;
+  }
   const costCard = document.createElement('div');
   costCard.className = 'counter-card';
   costCard.innerHTML = `
-    <div class="counter-label">Estimated total cost</div>
+    <div class="counter-label">Estimated total cost${filterLabel}</div>
     <div class="counter-value">${fmtCurrency(totalCost,'USD')}</div>
     <div class="counter-sub">Sum of city estimates + booked accommodations</div>
+    ${spanMonths > 0.5 ? `<div class="counter-sub" style="font-size:11px;margin-top:2px">Avg ${fmtCurrency(Math.round(avgPerMonth),'USD')}/month across ${spanMonths.toFixed(1)} months</div>` : ''}
+    ${varianceLine}
   `;
   container.appendChild(costCard);
 
-  // Days by country (top 5)
-  const countryMap = countryDayMap();
+  // Days by country (filtered)
+  const countryMap = countryDayMap(range);
   const topCountries = Object.entries(countryMap).sort((a,b) => b[1] - a[1]).slice(0, 6);
   const countriesTotal = Object.values(countryMap).reduce((a,b)=>a+b,0);
   const countryCard = document.createElement('div');
   countryCard.className = 'counter-card';
   countryCard.innerHTML = `
-    <div class="counter-label">Days by country</div>
+    <div class="counter-label">Days by country${filterLabel}</div>
     <div class="counter-value">${Object.keys(countryMap).length}</div>
     <div class="counter-sub">${countriesTotal} planned nights total</div>
     <div class="counter-breakdown">
@@ -1761,8 +1905,8 @@ function renderCounters() {
   `;
   container.appendChild(countryCard);
 
-  // US days by state
-  const stateMap = stateDayMap();
+  // US days by state (filtered)
+  const stateMap = stateDayMap(range);
   const topStates = Object.entries(stateMap).sort((a,b) => b[1] - a[1]).slice(0, 8);
   const usTotal = Object.values(stateMap).reduce((a,b)=>a+b,0);
   const stateCard = document.createElement('div');
@@ -1771,7 +1915,7 @@ function renderCounters() {
   if (usTotal > 32) usClass = 'alert';
   else if (usTotal > 25) usClass = 'warn';
   stateCard.innerHTML = `
-    <div class="counter-label">US days (rolling, by state)</div>
+    <div class="counter-label">US days (rolling, by state)${filterLabel}</div>
     <div class="counter-value ${usClass}">${usTotal} <span style="font-size:18px;color:var(--text-3)">/ 35*</span></div>
     <div class="counter-sub">* FEIE physical presence: max 35 US days per rolling 12 months</div>
     <div class="counter-breakdown">
@@ -1813,7 +1957,25 @@ function renderCities() {
     else active.push(c);
   });
 
-  // Render active (current + future) first
+  // Active list — use custom sortIndex if any city has it, otherwise keep date order
+  const hasCustomOrder = active.some(c => typeof c.sortIndex === 'number');
+  if (hasCustomOrder) {
+    active.sort((a, b) => {
+      const ai = typeof a.sortIndex === 'number' ? a.sortIndex : 9999;
+      const bi = typeof b.sortIndex === 'number' ? b.sortIndex : 9999;
+      if (ai !== bi) return ai - bi;
+      return (a.checkIn || '9999').localeCompare(b.checkIn || '9999');
+    });
+  }
+
+  // Show "reset sort" hint if custom order applied
+  if (hasCustomOrder) {
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;color:var(--text-3);font-family:\'JetBrains Mono\',monospace;text-align:right;margin-bottom:4px';
+    hint.innerHTML = `Custom order · <a href="#" onclick="event.preventDefault();resetCustomSort()" style="color:var(--accent);text-decoration:none">Reset to chronological</a>`;
+    container.appendChild(hint);
+  }
+
   active.forEach(city => container.appendChild(
     renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), false)
   ));
@@ -1854,10 +2016,122 @@ function renderCities() {
   }
 }
 
+// ==================== LIST DRAG-DROP ====================
+
+let _dragListCityId = null;
+
+function listDragStart(e, cityId) {
+  _dragListCityId = cityId;
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', cityId);
+  e.currentTarget.classList.add('dragging');
+}
+
+function listDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.city.drop-above, .city.drop-below').forEach(el => {
+    el.classList.remove('drop-above', 'drop-below');
+  });
+  _dragListCityId = null;
+}
+
+function listDragOver(e) {
+  if (!_dragListCityId) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const card = e.currentTarget;
+  if (card.dataset.cityId === _dragListCityId) return;
+  // Determine top vs bottom half
+  const rect = card.getBoundingClientRect();
+  const above = e.clientY < rect.top + rect.height / 2;
+  document.querySelectorAll('.city.drop-above, .city.drop-below').forEach(el => {
+    el.classList.remove('drop-above', 'drop-below');
+  });
+  card.classList.add(above ? 'drop-above' : 'drop-below');
+}
+
+function listDragLeave(e) {
+  if (e.relatedTarget && e.currentTarget.contains(e.relatedTarget)) return;
+  e.currentTarget.classList.remove('drop-above', 'drop-below');
+}
+
+function listDrop(e) {
+  if (!_dragListCityId) return;
+  e.preventDefault();
+  const card = e.currentTarget;
+  const targetId = card.dataset.cityId;
+  if (!targetId || targetId === _dragListCityId) {
+    listDragEnd(e);
+    return;
+  }
+  const rect = card.getBoundingClientRect();
+  const above = e.clientY < rect.top + rect.height / 2;
+
+  // Reorder in active list (non-past cities)
+  const todayStr = todayISO();
+  const active = state.cities.filter(c => !(c.checkOut && c.checkOut < todayStr));
+  // Apply current sortIndexes for stable initial order
+  const hasCustom = active.some(c => typeof c.sortIndex === 'number');
+  if (hasCustom) {
+    active.sort((a, b) => {
+      const ai = typeof a.sortIndex === 'number' ? a.sortIndex : 9999;
+      const bi = typeof b.sortIndex === 'number' ? b.sortIndex : 9999;
+      if (ai !== bi) return ai - bi;
+      return (a.checkIn || '9999').localeCompare(b.checkIn || '9999');
+    });
+  } else {
+    active.sort((a, b) => (a.checkIn || '9999').localeCompare(b.checkIn || '9999'));
+  }
+
+  const fromIdx = active.findIndex(c => c.id === _dragListCityId);
+  let toIdx = active.findIndex(c => c.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  const [dragged] = active.splice(fromIdx, 1);
+  // Adjust target index if removing from before shifted it
+  if (fromIdx < toIdx) toIdx--;
+  if (!above) toIdx++;
+  active.splice(toIdx, 0, dragged);
+
+  // Assign new sortIndexes
+  active.forEach((c, i) => {
+    const cityInState = state.cities.find(sc => sc.id === c.id);
+    if (cityInState) cityInState.sortIndex = i;
+  });
+
+  _dragListCityId = null;
+  saveState();
+  renderAll();
+  toast(`Moved ${dragged.name}`, 'ok');
+}
+
+function resetCustomSort() {
+  state.cities.forEach(c => { delete c.sortIndex; });
+  saveState();
+  renderAll();
+  toast('Reset to chronological order.', 'ok');
+}
+
 function renderCityCard(city, hasIssue, hasAlert, isPast) {
   const node = document.createElement('div');
   node.className = 'city' + (openCityIds.has(city.id) ? ' open' : '') + (hasAlert ? ' has-alert' : (hasIssue ? ' has-issue' : '')) + (isPast ? ' past' : '');
   const capturedId = city.id;
+  node.dataset.cityId = capturedId;
+  // Active (non-past) cards are draggable for manual reorder
+  if (!isPast) {
+    node.draggable = true;
+    node.addEventListener('dragstart', (e) => {
+      // Don't drag if user is interacting with form controls or expanded body
+      if (e.target.closest('input, textarea, select, button, [contenteditable]')) {
+        e.preventDefault();
+        return;
+      }
+      listDragStart(e, capturedId);
+    });
+    node.addEventListener('dragend', listDragEnd);
+    node.addEventListener('dragover', listDragOver);
+    node.addEventListener('dragleave', listDragLeave);
+    node.addEventListener('drop', listDrop);
+  }
 
   const nights = cityNights(city);
   const accomCount = (city.accommodations || []).length;
@@ -1873,6 +2147,10 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
     ? `<span class="score-badge ${scoreCls}" onclick="event.stopPropagation();openScoreModal('${capturedId}')" title="Click for full breakdown">★ ${composite}%</span>`
     : `<span class="score-badge gray" onclick="event.stopPropagation();openScoreModal('${capturedId}')" title="Click to score this destination">★ Score</span>`;
 
+  // City status pill (Tentative / Shortlisted / Booked)
+  const statusVal = city.status || 'tentative';
+  const statusPill = `<span class="pill ${statusVal}" style="font-size:10px;padding:2px 8px">${statusVal}</span>`;
+
   // Header
   const header = document.createElement('div');
   header.className = 'city-header';
@@ -1881,13 +2159,14 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
       <div class="city-title-row">
         <span class="city-name">${escapeHTML(city.name || '(unnamed)')}</span>
         <span class="city-country">${escapeHTML(city.country || '—')}${isSchengen(city.country) ? ' · Schengen' : ''}</span>
+        ${statusPill}
         ${scoreBadge}
       </div>
       <div class="city-dates">${fmtDate(city.checkIn)} → ${fmtDate(city.checkOut)} · ${nights} night${nights===1?'':'s'}</div>
     </div>
     <div class="city-stats">
       <div class="stat"><span class="num">${nights}</span> nights</div>
-      <div class="stat"><span class="num">${accomBooked}/${accomCount}</span> booked</div>
+      <div class="stat" title="Properties booked vs total candidates"><span class="num">${accomBooked}/${accomCount}</span> stays</div>
       <div class="stat"><span class="num">${fmtCurrency(cityCost,'USD')}</span></div>
     </div>
     <div class="city-chev">▶</div>
@@ -2458,10 +2737,19 @@ function setAPIKey(v) {
   window._keyTimer = setTimeout(() => saveState(), 500);
 }
 
+function setBudgetTarget(v) {
+  const n = parseFloat(v);
+  state.budgetMonthlyTarget = (isFinite(n) && n >= 0) ? n : 0;
+  clearTimeout(window._budgetTimer);
+  window._budgetTimer = setTimeout(() => { saveState(); renderCounters(); }, 300);
+}
+
 function renderSettings() {
   document.querySelector('input[name="ai-mode"][value="'+(state.aiMode||'copy')+'"]').checked = true;
   document.getElementById('api-key-block').style.display = state.aiMode === 'api' ? 'block' : 'none';
   document.getElementById('api-key-input').value = state.apiKey || '';
+  const budgetInput = document.getElementById('budget-target-input');
+  if (budgetInput) budgetInput.value = state.budgetMonthlyTarget || '';
   renderAIUsage();
 }
 
@@ -3587,9 +3875,7 @@ function renderMap() {
   const bounds = [];
 
   cityPoints.forEach(c => {
-    let kind = 'future';
-    if (c.checkOut && c.checkOut < todayStr) kind = 'past';
-    else if (c.checkIn && c.checkOut && c.checkIn <= todayStr && c.checkOut > todayStr) kind = 'now';
+    const kind = cityMarkerKind(c, todayStr);
     const marker = L.circleMarker([c.lat, c.lng], markerStyleFor(kind));
     marker.bindPopup(buildPopup(c, kind));
     marker.addTo(_map);
@@ -3618,19 +3904,36 @@ function renderMap() {
 function markerStyleFor(kind) {
   const base = { radius: 8, weight: 2, opacity: 1, fillOpacity: 0.9 };
   if (kind === 'past') return { ...base, color: '#555', fillColor: '#888' };
-  if (kind === 'now') return { ...base, color: '#9c181d', fillColor: '#c72027', radius: 10 };
+  if (kind === 'now') return { ...base, color: '#9c181d', fillColor: '#c72027', radius: 11, weight: 3 };
+  if (kind === 'future-booked') return { ...base, color: '#9c181d', fillColor: '#c72027', fillOpacity: 1, weight: 2 };
+  if (kind === 'future-shortlisted') return { ...base, color: '#c72027', fillColor: '#f3d1d3', fillOpacity: 0.95 };
   if (kind === 'future') return { ...base, color: '#c72027', fillColor: '#ffffff', fillOpacity: 0.95 };
   if (kind === 'idea') return { ...base, color: '#1f4a70', fillColor: '#2c5d8a' };
   return base;
 }
 
 function buildPopup(c, kind) {
-  const labels = { past: 'Past', now: 'Now', future: 'Future' };
+  const labels = {
+    'past': 'Past', 'now': 'Now',
+    'future': 'Future · Tentative',
+    'future-shortlisted': 'Future · Shortlisted',
+    'future-booked': 'Future · Booked'
+  };
   return `<div class="map-popup">
     <div class="name">${escapeHTML(c.name)}</div>
-    <div class="meta">${labels[kind]} · ${escapeHTML(c.country||'')}</div>
+    <div class="meta">${labels[kind] || 'Future'} · ${escapeHTML(c.country||'')}</div>
     <div class="dates">${fmtDate(c.checkIn)} → ${fmtDate(c.checkOut)}</div>
   </div>`;
+}
+
+// Determine the appropriate marker kind for a city
+function cityMarkerKind(c, todayStr) {
+  if (c.checkOut && c.checkOut < todayStr) return 'past';
+  if (c.checkIn && c.checkIn <= todayStr && c.checkOut && c.checkOut >= todayStr) return 'now';
+  // Future — split by status
+  if (c.status === 'booked') return 'future-booked';
+  if (c.status === 'shortlisted') return 'future-shortlisted';
+  return 'future';
 }
 
 // ==================== SCORING ====================
@@ -4246,6 +4549,7 @@ function onMapFilterChange() {
   }
   saveState();
   renderMap();
+  renderCounters();
 }
 
 function onMapDateChange() {
@@ -4253,6 +4557,7 @@ function onMapDateChange() {
   state.mapTo = document.getElementById('map-to').value;
   saveState();
   renderMap();
+  renderCounters();
 }
 
 // ==================== BOARD VIEW ====================
