@@ -414,7 +414,15 @@
   .idea-list { display: flex; flex-direction: column; gap: 8px; }
   .idea {
     background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;
-    padding: 10px 14px; display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: center;
+    padding: 10px 14px; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+  }
+  .idea-actions { display: flex; gap: 8px; align-items: center; }
+  @media (max-width: 720px) {
+    .idea { grid-template-columns: 1fr; gap: 10px; }
+    .idea-actions { width: 100%; }
+    .idea-actions .select-input { flex: 1; }
+    .idea-actions .btn-secondary { flex: 2; }
+    .idea-actions .icon-btn { flex: 0 0 auto; }
   }
   .idea.eliminated { opacity: 0.6; }
   .idea-main { min-width: 0; }
@@ -601,6 +609,14 @@
   .city.past { opacity: 0.85; }
   .city.past .city-name { color: var(--text-2); }
   .past-flat-list { display: flex; flex-direction: column; gap: 12px; }
+  .city-footer-actions {
+    margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border-light);
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  @media (max-width: 720px) {
+    .city-footer-actions { flex-direction: column; }
+    .city-footer-actions .btn-secondary { width: 100%; }
+  }
   @media (max-width: 720px) {
     .past-list { padding: 4px 8px 8px 16px; margin: 0 4px 8px 12px; }
   }
@@ -2320,12 +2336,7 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
 
   // Delete + Duplicate + Demote buttons
   const footer = document.createElement('div');
-  footer.style.marginTop = '20px';
-  footer.style.paddingTop = '12px';
-  footer.style.borderTop = '1px solid var(--border-light)';
-  footer.style.display = 'flex';
-  footer.style.gap = '8px';
-  footer.style.flexWrap = 'wrap';
+  footer.className = 'city-footer-actions';
   footer.innerHTML = '<button class="btn-secondary" onclick="duplicateCity(\''+capturedId+'\')" title="Create a fresh copy with new dates — useful for home base or return stays">⧉ Duplicate</button><button class="btn-secondary" onclick="demoteCity(\''+capturedId+'\')" title="Move back to Ideas (loses per-city detail but keeps notes)">↩ Demote to Ideas</button><button class="btn-secondary danger" onclick="deleteCity(\''+capturedId+'\')">Delete this city</button>';
   body.appendChild(footer);
 
@@ -2811,6 +2822,10 @@ function renderIdea(idea) {
 
   node.appendChild(main);
 
+  // Actions wrapper - keeps status/promote/delete together so they can stack below content on mobile
+  const actions = document.createElement('div');
+  actions.className = 'idea-actions';
+
   // Status select
   const sel = document.createElement('select');
   sel.className = 'select-input';
@@ -2821,7 +2836,7 @@ function renderIdea(idea) {
     sel.appendChild(o);
   });
   sel.onchange = () => updateIdea(capturedId, 'status', sel.value);
-  node.appendChild(sel);
+  actions.appendChild(sel);
 
   // Promote to city button
   const promote = document.createElement('button');
@@ -2829,14 +2844,16 @@ function renderIdea(idea) {
   promote.textContent = '→ Itinerary';
   promote.title = 'Move to itinerary as a city';
   promote.onclick = () => promoteIdea(capturedId);
-  node.appendChild(promote);
+  actions.appendChild(promote);
 
   // Delete
   const del = document.createElement('button');
   del.className = 'icon-btn delete';
   del.textContent = '✕';
   del.onclick = () => removeIdea(capturedId);
-  node.appendChild(del);
+  actions.appendChild(del);
+
+  node.appendChild(actions);
 
   return node;
 }
