@@ -3813,12 +3813,14 @@ async function publishFamilyShare() {
 // warm off-white background, refined card shadows, status-aware color coding.
 function buildFamilyShareHTML(payload) {
   const data = JSON.stringify(payload).replace(/<\//g, '<\\/'); // safe for script embed
+  const initial = ((payload.travelerName || 'R').trim().charAt(0) || 'R').toUpperCase();
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHTML(payload.travelerName)} · Travel Plan</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%23c72027'/%3E%3Ctext x='50' y='74' font-family='Georgia,serif' font-size='72' font-weight='600' fill='white' text-anchor='middle'%3E${initial}%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,1,400;9..144,1,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -3875,8 +3877,10 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .pill.booked { background: var(--green-soft); color: var(--green); }
 .pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
 .pill.tentative { background: var(--amber-soft); color: var(--amber); }
-.map-wrap { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 8px; }
+.map-wrap { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 8px; }
 #map { height: 420px; z-index: 1; }
+.map-reset-btn { position: absolute; top: 10px; left: 52px; z-index: 1000; background: white; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; padding: 5px 10px; font-size: 11px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.15s; }
+.map-reset-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 .map-legend { display: flex; gap: 16px; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 8px; }
 .map-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; border: 1.5px solid white; box-shadow: 0 0 0 1px var(--border); }
 .empty { color: var(--text-3); font-style: italic; padding: 24px; text-align: center; background: var(--bg-softer); border: 1px dashed var(--border); border-radius: 8px; font-size: 13px; }
@@ -3908,7 +3912,7 @@ footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(
   <div id="current-section"></div>
 
   <div class="section-head"><h2>The map</h2><span class="meta">All stops</span></div>
-  <div class="map-wrap"><div id="map"></div></div>
+  <div class="map-wrap"><button class="map-reset-btn" onclick="resetMapView()" title="Fit all pins in view">⤢ Reset view</button><div id="map"></div></div>
   <div class="map-legend" id="map-legend"></div>
 
   <div id="future-section"></div>
@@ -4027,6 +4031,7 @@ function initMap(cities, current) {
   const valid = cities.filter(c => typeof c.lat === 'number' && typeof c.lng === 'number');
   if (valid.length === 0) {
     document.getElementById('map').innerHTML = '<div class="empty" style="margin:20px">No locations to map yet.</div>';
+    document.querySelector('.map-reset-btn').style.display = 'none';
     return;
   }
   const map = L.map('map').setView([valid[0].lat, valid[0].lng], 3);
@@ -4042,7 +4047,19 @@ function initMap(cities, current) {
     marker.bindPopup('<strong style="font-family:Fraunces,serif;font-size:15px">' + escapeHTML(c.name) + '</strong><br><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:#666;letter-spacing:0.08em;text-transform:uppercase">' + escapeHTML(c.country) + '</span>' + datesBit + statusBit + (isCurrent ? '<br><strong style="color:#c72027;font-family:JetBrains Mono,monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase">★ Currently here</strong>' : ''));
     bounds.push([c.lat, c.lng]);
   });
-  if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40] });
+  // Store for reset button
+  window._famMap = map;
+  window._famBounds = bounds;
+  if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+}
+
+function resetMapView() {
+  if (!window._famMap || !window._famBounds) return;
+  if (window._famBounds.length > 1) {
+    window._famMap.fitBounds(window._famBounds, { padding: [40, 40], maxZoom: 8 });
+  } else if (window._famBounds.length === 1) {
+    window._famMap.setView(window._famBounds[0], 8);
+  }
 }
 
 render();
