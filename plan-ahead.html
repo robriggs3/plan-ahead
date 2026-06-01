@@ -214,7 +214,7 @@
 
   /* CITY CARDS (Itinerary) */
   .add-city-row {
-    display: grid; grid-template-columns: 2fr 1.5fr 1fr 1fr auto; gap: 8px;
+    display: grid; grid-template-columns: 1.5fr 2fr 1fr 1fr auto; gap: 8px;
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
     padding: 10px; margin-bottom: 16px; align-items: center;
   }
@@ -339,11 +339,16 @@
   .accom-list { display: flex; flex-direction: column; gap: 8px; }
   .accom-item {
     background: var(--bg-softer); border: 1px solid var(--border-light); border-radius: 8px;
-    padding: 12px;
+    padding: 12px; transition: box-shadow 0.2s, border-color 0.2s, background 0.2s;
+  }
+  .accom-item.open {
+    background: var(--bg-card); border-color: var(--border);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
   }
   .accom-row1 {
-    display: grid; grid-template-columns: 2fr auto auto; gap: 12px; align-items: center;
+    display: grid; grid-template-columns: 2fr auto auto auto; gap: 12px; align-items: center;
   }
+  .accom-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-light); }
   .accom-name {
     font-weight: 500; outline: none; padding: 2px 4px; border-radius: 3px; font-size: 14px;
     min-width: 60px;
@@ -608,6 +613,42 @@
   }
   .city.past { opacity: 0.85; }
   .city.past .city-name { color: var(--text-2); }
+  .research-row {
+    margin: 18px 0;
+    padding: 14px 18px;
+    background: var(--bg-softer);
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .sub-item.ai-sourced {
+    background: linear-gradient(to right, var(--accent-soft, #fce8e9) 0%, var(--bg-card) 12%);
+    border-left: 2px solid var(--accent);
+  }
+  .city-elevated {
+    border-color: var(--accent) !important;
+    box-shadow: 0 4px 16px rgba(199,32,39,0.08), 0 1px 4px rgba(0,0,0,0.04) !important;
+  }
+  .city-elevated::before {
+    content: "● You're here";
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 0 0 6px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 600;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+  .city-elevated { position: relative; padding-top: 36px; }
   .past-flat-list { display: flex; flex-direction: column; gap: 12px; }
   .city-footer-actions {
     margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border-light);
@@ -866,14 +907,23 @@
     </div>
   </header>
 
-  <!-- NOW & NEXT -->
+  <!-- TRAVEL PLANS — Now/Next/After tile + warnings -->
   <section class="section">
     <div class="section-head">
-      <h2>Where you are</h2>
+      <h2>Travel plans</h2>
       <div class="meta" id="now-meta">—</div>
     </div>
     <div id="now-now"></div>
     <div class="warnings" id="now-warnings"></div>
+  </section>
+
+  <!-- WHERE YOU ARE — elevated current city card. Hidden if no city overlaps today. -->
+  <section class="section" id="where-you-are-section" style="display:none">
+    <div class="section-head">
+      <h2>Where you are</h2>
+      <div class="meta" id="where-meta">—</div>
+    </div>
+    <div id="now-current-city"></div>
   </section>
 
   <!-- MAP -->
@@ -948,10 +998,10 @@
 
     <div id="view-list-wrap">
       <div class="add-city-row">
-        <input class="text-input" id="add-city-name" placeholder="City (e.g. Sarandë)">
         <select class="select-input" id="add-city-country" title="Country">
           <option value="">Country</option>
         </select>
+        <input class="text-input" id="add-city-name" placeholder="City (e.g. Sarandë)">
         <input class="date-input" type="date" id="add-city-checkin" title="Check-in">
         <input class="date-input" type="date" id="add-city-checkout" title="Check-out">
         <button class="btn" onclick="addCity()">Add</button>
@@ -1838,6 +1888,24 @@ function renderNow() {
       `;
     }).join('');
     container.innerHTML = `<div class="now-card now-card-multi">${blocks}</div>`;
+
+    // Diagnostic: if current city exists but no future cards rendered, surface why.
+    // Helps catch cases where future cities exist in itinerary but have missing/invalid dates.
+    if (current && cards.length === 1) {
+      const totalFuture = state.cities.filter(c => c.checkIn && c.checkIn > todayStr).length;
+      const totalNoDate = state.cities.filter(c => !c.checkIn || !c.checkOut).length;
+      const hint = document.createElement('div');
+      hint.style.cssText = 'margin-top:10px;padding:10px 14px;background:var(--bg-softer);border:1px dashed var(--border);border-radius:6px;font-size:12px;color:var(--text-3);font-family:\'JetBrains Mono\',monospace;line-height:1.6';
+      let msg = `<strong style="color:var(--text-2)">No upcoming cities to show as NEXT / AFTER.</strong><br>`;
+      if (totalFuture === 0 && totalNoDate > 0) {
+        msg += `Found ${totalNoDate} cit${totalNoDate===1?'y':'ies'} with no check-in/check-out date. Set dates on them to appear here.`;
+      } else if (totalFuture === 0) {
+        msg += `No cities in your itinerary have future dates. Add one above.`;
+      } else {
+        msg += `${totalFuture} future cit${totalFuture===1?'y':'ies'} found but didn't pass the date check — open the Itinerary list to inspect.`;
+      }
+      container.appendChild(hint);
+    }
   }
 
   // Issues
@@ -1862,6 +1930,38 @@ function renderNow() {
     resetRow.style.cssText = 'font-size:11px;color:var(--text-3);font-family:\'JetBrains Mono\',monospace;text-align:right;margin-top:4px';
     resetRow.innerHTML = `${state.dismissedGaps.length} gap${state.dismissedGaps.length===1?'':'s'} dismissed · <a href="#" onclick="event.preventDefault();clearDismissedGaps()" style="color:var(--accent);text-decoration:none">Clear all</a>`;
     warnings.appendChild(resetRow);
+  }
+
+  // Elevated current city card — full editable card pulled out of the itinerary list
+  // so research (neighborhoods, restaurants, accommodation) is one scroll away while in-place
+  const elevatedContainer = document.getElementById('now-current-city');
+  const whereSection = document.getElementById('where-you-are-section');
+  const whereMeta = document.getElementById('where-meta');
+  if (elevatedContainer) {
+    elevatedContainer.innerHTML = '';
+    if (current) {
+      // Show the "Where you are" section
+      if (whereSection) whereSection.style.display = '';
+      const daysLeft = Math.round((parseDate(current.checkOut) - parseDate(todayStr)) / 86400000);
+      if (whereMeta) whereMeta.textContent = `${daysLeft}d left in ${current.name}`;
+
+      const issues2 = detectIssues();
+      const issueIds = new Set(issues2.flatMap(i => i.cityIds));
+      const alertIds = new Set(issues2.filter(i => i.severity === 'alert').flatMap(i => i.cityIds));
+      const card = renderCityCard(current, issueIds.has(current.id), alertIds.has(current.id), false);
+      card.classList.add('city-elevated');
+      // Remove footer buttons that don't make sense for the current location:
+      // Demote (you're here, not a hypothetical) and Delete (you're literally there).
+      // Keep Duplicate — you might want a "next time I visit" stub copy.
+      card.querySelectorAll('.city-footer-actions button').forEach(btn => {
+        const oc = btn.getAttribute('onclick') || '';
+        if (oc.includes('demoteCity') || oc.includes('deleteCity')) btn.remove();
+      });
+      elevatedContainer.appendChild(card);
+    } else {
+      // Hide section when no current city
+      if (whereSection) whereSection.style.display = 'none';
+    }
   }
 }
 
@@ -1988,6 +2088,7 @@ function renderCounters() {
 // ==================== ITINERARY ====================
 
 let openCityIds = new Set();
+let openAccomIds = new Set();
 
 function renderCities() {
   const container = document.getElementById('city-list');
@@ -2013,27 +2114,37 @@ function renderCities() {
   const todayStr = todayISO();
   const activeFilter = state.statusFilter || 'all';
 
-  // Categorize: past vs active, by status
+  // Categorize: current vs past vs active by status.
+  // The current city (overlapping today) is rendered in the elevated "Where you are" section,
+  // NOT in the itinerary list — keeps the list future-focused.
   const past = [];
   const byStatus = { booked: [], shortlisted: [], tentative: [] };
   cities.forEach(c => {
     if (c.checkOut && c.checkOut < todayStr) { past.push(c); return; }
+    // Skip the current city — it lives up in "Where you are" now
+    if (c.checkIn && c.checkOut && c.checkIn <= todayStr && c.checkOut > todayStr) return;
     const s = c.status || 'tentative';
     if (s === 'booked') byStatus.booked.push(c);
     else if (s === 'shortlisted') byStatus.shortlisted.push(c);
     else byStatus.tentative.push(c);
   });
 
-  // Apply custom sort within each group if any city has sortIndex
-  Object.values(byStatus).forEach(arr => {
-    const hasCustom = arr.some(c => typeof c.sortIndex === 'number');
-    if (hasCustom) {
-      arr.sort((a, b) => {
-        const ai = typeof a.sortIndex === 'number' ? a.sortIndex : 9999;
-        const bi = typeof b.sortIndex === 'number' ? b.sortIndex : 9999;
-        if (ai !== bi) return ai - bi;
-        return (a.checkIn || '9999').localeCompare(b.checkIn || '9999');
-      });
+  // Apply sort within each group:
+  // - Booked: ALWAYS chronological by check-in date (commitments have real timing)
+  // - Shortlisted/Tentative: custom drag-drop order if user has reordered, else chronological
+  Object.entries(byStatus).forEach(([status, arr]) => {
+    if (status === 'booked') {
+      arr.sort((a, b) => (a.checkIn || '9999').localeCompare(b.checkIn || '9999'));
+    } else {
+      const hasCustom = arr.some(c => typeof c.sortIndex === 'number');
+      if (hasCustom) {
+        arr.sort((a, b) => {
+          const ai = typeof a.sortIndex === 'number' ? a.sortIndex : 9999;
+          const bi = typeof b.sortIndex === 'number' ? b.sortIndex : 9999;
+          if (ai !== bi) return ai - bi;
+          return (a.checkIn || '9999').localeCompare(b.checkIn || '9999');
+        });
+      }
     }
   });
 
@@ -2108,10 +2219,15 @@ function renderStatusFilters() {
   const container = document.getElementById('status-filters');
   if (!container) return;
   const todayStr = todayISO();
-  const counts = { all: 0, booked: 0, shortlisted: 0, tentative: 0, past: 0 };
+  const counts = { all: 0, booked: 0, shortlisted: 0, tentative: 0, past: 0, current: 0 };
   state.cities.forEach(c => {
+    if (c.checkOut && c.checkOut < todayStr) { counts.past++; counts.all++; return; }
+    if (c.checkIn && c.checkOut && c.checkIn <= todayStr && c.checkOut > todayStr) {
+      // current city — counted as "current" only, NOT in active status totals (lives in Where you are)
+      counts.current++;
+      return;
+    }
     counts.all++;
-    if (c.checkOut && c.checkOut < todayStr) { counts.past++; return; }
     const s = c.status || 'tentative';
     if (s === 'booked') counts.booked++;
     else if (s === 'shortlisted') counts.shortlisted++;
@@ -2319,7 +2435,9 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA') return;
     if (openCityIds.has(capturedId)) openCityIds.delete(capturedId);
     else openCityIds.add(capturedId);
-    renderCities();
+    // renderAll instead of just renderCities — the elevated card lives in the "Where you are"
+    // section (rendered by renderNow), so collapsing requires re-rendering that too.
+    renderAll();
   };
   node.appendChild(header);
 
@@ -2332,6 +2450,7 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
   body.appendChild(buildCityNotes(city));
   body.appendChild(buildLatLngRow(city));
   body.appendChild(buildAccommodations(city));
+  body.appendChild(buildResearchButton(city));
   body.appendChild(buildCitySubsections(city));
 
   // Delete + Duplicate + Demote buttons
@@ -2349,9 +2468,7 @@ function buildCityFields(city) {
   div.className = 'city-fields';
   const capturedId = city.id;
 
-  // Name
-  div.appendChild(makeField('City name', 'text', city.name || '', v => updateCity(capturedId, 'name', v)));
-  // Country
+  // 1. Country (first — scopes everything else)
   const countryLabel = document.createElement('div');
   countryLabel.innerHTML = '<span class="field-label">Country</span>';
   const countrySel = document.createElement('select');
@@ -2363,7 +2480,7 @@ function buildCityFields(city) {
   countryLabel.appendChild(countrySel);
   div.appendChild(countryLabel);
 
-  // State (only if US)
+  // 2. US State (only if US)
   if (isUS(city.country)) {
     const stateLabel = document.createElement('div');
     stateLabel.innerHTML = '<span class="field-label">US State</span>';
@@ -2375,31 +2492,93 @@ function buildCityFields(city) {
     stateSel.onchange = () => updateCity(capturedId, 'state', stateSel.value);
     stateLabel.appendChild(stateSel);
     div.appendChild(stateLabel);
-  } else {
-    // Status field
-    const statusLabel = document.createElement('div');
-    statusLabel.innerHTML = '<span class="field-label">Status</span>';
-    const sel = document.createElement('select');
-    sel.className = 'field-input';
-    ['tentative','shortlisted','booked'].forEach(s => {
-      const o = document.createElement('option');
-      o.value = s; o.textContent = s.charAt(0).toUpperCase() + s.slice(1);
-      if (s === (city.status || 'tentative')) o.selected = true;
-      sel.appendChild(o);
-    });
-    sel.onchange = () => updateCity(capturedId, 'status', sel.value);
-    statusLabel.appendChild(sel);
-    div.appendChild(statusLabel);
   }
 
-  // Check-in
-  div.appendChild(makeField('Check-in', 'date', city.checkIn || '', v => updateCity(capturedId, 'checkIn', v)));
-  // Check-out
-  div.appendChild(makeField('Check-out', 'date', city.checkOut || '', v => updateCity(capturedId, 'checkOut', v)));
-  // Estimated cost
-  div.appendChild(makeField('Est. cost (USD)', 'number', city.estimatedCost || '', v => updateCity(capturedId, 'estimatedCost', v)));
+  // 3. City name
+  div.appendChild(makeField('City name', 'text', city.name || '', v => updateCity(capturedId, 'name', v)));
+
+  // 4. Status (always shown — was previously hidden when US)
+  const statusLabel = document.createElement('div');
+  statusLabel.innerHTML = '<span class="field-label">Status</span>';
+  const sel = document.createElement('select');
+  sel.className = 'field-input';
+  ['tentative','shortlisted','booked'].forEach(s => {
+    const o = document.createElement('option');
+    o.value = s; o.textContent = s.charAt(0).toUpperCase() + s.slice(1);
+    if (s === (city.status || 'tentative')) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.onchange = () => updateCity(capturedId, 'status', sel.value);
+  statusLabel.appendChild(sel);
+  div.appendChild(statusLabel);
+
+  // 5. Check-in / Check-out: paired with validation
+  const inWrap = makeField('Check-in', 'date', city.checkIn || '', v => updateCity(capturedId, 'checkIn', v));
+  const outWrap = makeField('Check-out', 'date', city.checkOut || '', v => updateCity(capturedId, 'checkOut', v));
+  linkDatePair(inWrap.querySelector('input'), outWrap.querySelector('input'));
+  div.appendChild(inWrap);
+  div.appendChild(outWrap);
+
+  // 6. Estimated housing cost (with optional sync-from-accommodations hint)
+  const costWrap = makeField('Est. housing (USD)', 'number', city.estimatedCost || '', v => updateCity(capturedId, 'estimatedCost', v));
+  div.appendChild(costWrap);
+
+  // Cost sync hint: shows if there are booked accommodations whose total differs from estimatedCost
+  appendCostSyncHint(costWrap, city, capturedId);
 
   return div;
+}
+
+// Adds a small "Booked total: $X · Use as estimate" hint under the cost field
+// when there are booked accommodations and they total something different from estimatedCost.
+function appendCostSyncHint(costWrap, city, cityId) {
+  const booked = (city.accommodations || []).filter(a => a.status === 'booked' && a.cost);
+  if (booked.length === 0) return;
+  const bookedTotal = booked.reduce((sum, a) => {
+    // Note: we treat all costs as USD for simplicity. If a.currency differs, the user should reconcile.
+    return sum + (Number(a.cost) || 0);
+  }, 0);
+  const estCost = Number(city.estimatedCost) || 0;
+  if (Math.abs(bookedTotal - estCost) < 1) return; // already in sync, no hint needed
+
+  const hint = document.createElement('div');
+  hint.style.cssText = 'font-family:\'JetBrains Mono\',monospace;font-size:11px;color:var(--text-3);margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap';
+  const text = document.createElement('span');
+  text.innerHTML = `Booked total: <strong style="color:var(--green)">$${bookedTotal.toLocaleString()}</strong>`;
+  hint.appendChild(text);
+
+  const syncBtn = document.createElement('button');
+  syncBtn.textContent = estCost === 0 ? 'Use as estimate →' : 'Sync estimate →';
+  syncBtn.style.cssText = 'background:transparent;border:1px solid var(--accent);color:var(--accent);padding:2px 8px;border-radius:3px;font-family:\'JetBrains Mono\',monospace;font-size:10px;letter-spacing:0.05em;text-transform:uppercase;cursor:pointer';
+  syncBtn.onclick = () => {
+    updateCity(cityId, 'estimatedCost', String(bookedTotal));
+    toast(`✓ Estimate synced to $${bookedTotal.toLocaleString()} from booked accommodations.`, 'ok');
+  };
+  hint.appendChild(syncBtn);
+  costWrap.appendChild(hint);
+}
+
+// Links a check-in input to a check-out input.
+// - Sets `min` on check-out so the date picker won't navigate before check-in.
+// - When check-in changes, auto-advances check-out to check-in + 1 day if it would otherwise be invalid.
+function linkDatePair(inEl, outEl) {
+  if (!inEl || !outEl) return;
+  function sync() {
+    if (inEl.value) {
+      outEl.min = inEl.value;
+      if (outEl.value && outEl.value <= inEl.value) {
+        const d = new Date(inEl.value + 'T00:00:00');
+        d.setDate(d.getDate() + 1);
+        outEl.value = d.toISOString().slice(0, 10);
+        outEl.dispatchEvent(new Event('change'));
+      }
+    } else {
+      outEl.removeAttribute('min');
+    }
+  }
+  inEl.addEventListener('change', sync);
+  inEl.addEventListener('input', sync);
+  sync();
 }
 
 function makeField(label, type, value, onChange) {
@@ -2452,11 +2631,11 @@ function buildAccommodations(city) {
 
 function buildAccommodation(city, acc) {
   const item = document.createElement('div');
-  item.className = 'accom-item';
+  item.className = 'accom-item' + (openAccomIds.has(acc.id) ? ' open' : '');
   const cityId = city.id;
   const accId = acc.id;
 
-  // Row 1: name, link, status, delete
+  // Row 1: name, link, status, delete (ALWAYS VISIBLE — this is the clickable header)
   const row1 = document.createElement('div');
   row1.className = 'accom-row1';
 
@@ -2476,25 +2655,67 @@ function buildAccommodation(city, acc) {
 
   const linkRow = document.createElement('div');
   linkRow.style.fontSize = '12px';
-  linkRow.style.marginTop = '2px';
-  const linkSpan = document.createElement('span');
-  linkSpan.className = 'accom-link';
-  linkSpan.contentEditable = 'true';
-  linkSpan.textContent = acc.link || '';
-  linkSpan.dataset.placeholder = 'https://…';
-  if (!acc.link) linkSpan.style.color = 'var(--text-3)';
-  linkSpan.addEventListener('focus', () => linkSpan.style.color = '');
-  linkSpan.addEventListener('blur', () => {
-    const v = linkSpan.textContent.trim();
-    updateAccom(cityId, accId, 'link', v);
-  });
-  linkRow.appendChild(linkSpan);
-  if (acc.link) {
-    const open = document.createElement('a');
-    open.href = acc.link; open.target = '_blank'; open.rel = 'noopener';
-    open.textContent = ' ↗'; open.style.color = 'var(--accent)'; open.style.textDecoration = 'none';
-    linkRow.appendChild(open);
+  linkRow.style.marginTop = '4px';
+  linkRow.style.display = 'flex';
+  linkRow.style.alignItems = 'center';
+  linkRow.style.gap = '6px';
+  linkRow.style.flexWrap = 'wrap';
+
+  function renderLinkRow() {
+    linkRow.innerHTML = '';
+    const link = acc.link || '';
+    if (link) {
+      // Try to extract domain for clean display
+      let domain = link;
+      try { domain = new URL(link).hostname.replace(/^www\./, ''); } catch(e) {}
+      const open = document.createElement('a');
+      open.href = link; open.target = '_blank'; open.rel = 'noopener';
+      open.title = link;
+      open.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--accent-soft,#f3f0e8);color:var(--accent);border-radius:4px;font-size:11px;text-decoration:none;font-family:\'JetBrains Mono\',monospace;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      open.textContent = '🔗 ' + domain;
+      linkRow.appendChild(open);
+
+      const edit = document.createElement('button');
+      edit.className = 'icon-btn';
+      edit.textContent = '✎';
+      edit.title = 'Edit link';
+      edit.style.cssText = 'background:transparent;border:none;color:var(--text-3);cursor:pointer;padding:2px 4px;font-size:13px';
+      edit.onclick = () => editLink();
+      linkRow.appendChild(edit);
+
+      const rem = document.createElement('button');
+      rem.className = 'icon-btn';
+      rem.textContent = '✕';
+      rem.title = 'Remove link';
+      rem.style.cssText = 'background:transparent;border:none;color:var(--text-3);cursor:pointer;padding:2px 4px;font-size:11px';
+      rem.onclick = () => {
+        acc.link = '';
+        updateAccom(cityId, accId, 'link', '');
+        renderLinkRow();
+      };
+      linkRow.appendChild(rem);
+    } else {
+      const addBtn = document.createElement('button');
+      addBtn.className = 'icon-btn';
+      addBtn.textContent = '+ Add booking link';
+      addBtn.style.cssText = 'background:transparent;border:1px dashed var(--border);color:var(--text-3);cursor:pointer;padding:3px 8px;font-size:11px;border-radius:4px;font-family:\'JetBrains Mono\',monospace';
+      addBtn.onclick = () => editLink();
+      linkRow.appendChild(addBtn);
+    }
   }
+
+  function editLink() {
+    const current = acc.link || '';
+    const updated = prompt('Booking link (Airbnb, Booking.com, Idealista, etc.):', current);
+    if (updated !== null) {
+      const trimmed = updated.trim();
+      acc.link = trimmed;
+      updateAccom(cityId, accId, 'link', trimmed);
+      renderLinkRow();
+    }
+  }
+
+  renderLinkRow();
   nameWrap.appendChild(linkRow);
   row1.appendChild(nameWrap);
 
@@ -2514,10 +2735,57 @@ function buildAccommodation(city, acc) {
   del.className = 'icon-btn delete';
   del.textContent = '✕';
   del.title = 'Remove';
-  del.onclick = () => removeAccom(cityId, accId);
+  del.onclick = (e) => { e.stopPropagation(); removeAccom(cityId, accId); };
   row1.appendChild(del);
 
+  // Chevron to toggle expand/collapse
+  const chev = document.createElement('button');
+  chev.className = 'accom-chev';
+  chev.title = 'Expand / collapse';
+  chev.innerHTML = '▾';
+  chev.style.cssText = 'background:transparent;border:none;cursor:pointer;color:var(--text-3);font-size:14px;padding:4px 6px;transition:transform 0.2s';
+  chev.onclick = (e) => {
+    e.stopPropagation();
+    if (openAccomIds.has(accId)) openAccomIds.delete(accId);
+    else openAccomIds.add(accId);
+    item.classList.toggle('open');
+    body.style.display = openAccomIds.has(accId) ? '' : 'none';
+    chev.style.transform = openAccomIds.has(accId) ? 'rotate(0deg)' : 'rotate(-90deg)';
+  };
+  row1.appendChild(chev);
+
+  // Make clicking the row1 background (but not its form/button children) also toggle
+  row1.style.cursor = 'pointer';
+  row1.addEventListener('click', (e) => {
+    // Only toggle if click is on row1 itself or a non-interactive child
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (['input','select','textarea','button','a'].includes(tag)) return;
+    if (e.target.isContentEditable) return;
+    chev.click();
+  });
+
   item.appendChild(row1);
+
+  // Stats summary (always visible — shows in both collapsed and expanded states under row1)
+  const summary = document.createElement('div');
+  summary.className = 'accom-summary';
+  summary.style.cssText = 'font-family:\'JetBrains Mono\',monospace;font-size:11px;color:var(--text-3);letter-spacing:0.04em;padding:4px 0 0';
+  function renderSummary() {
+    const nights = nightsBetween(acc.checkIn, acc.checkOut);
+    const parts = [];
+    if (acc.neighborhood) parts.push(acc.neighborhood);
+    if (nights > 0) parts.push(`${nights} night${nights===1?'':'s'}`);
+    if (acc.cost) parts.push(fmtCurrency(acc.cost, acc.currency||'USD'));
+    summary.textContent = parts.length ? parts.join(' · ') : '(not yet configured)';
+  }
+  renderSummary();
+  item.appendChild(summary);
+
+  // Collapsible body — holds all editing fields
+  const body = document.createElement('div');
+  body.className = 'accom-body';
+  body.style.display = openAccomIds.has(accId) ? '' : 'none';
+  chev.style.transform = openAccomIds.has(accId) ? 'rotate(0deg)' : 'rotate(-90deg)';
 
   // Row 2: neighborhood, check-in, check-out, cost, currency
   const row2 = document.createElement('div');
@@ -2543,6 +2811,7 @@ function buildAccommodation(city, acc) {
   outD.value = acc.checkOut || '';
   outD.onchange = () => updateAccom(cityId, accId, 'checkOut', outD.value);
   row2.appendChild(outD);
+  linkDatePair(inD, outD);
 
   const cost = document.createElement('input');
   cost.type = 'number'; cost.className = 'accom-mini-field';
@@ -2562,7 +2831,7 @@ function buildAccommodation(city, acc) {
   cur.onchange = () => updateAccom(cityId, accId, 'currency', cur.value);
   row2.appendChild(cur);
 
-  item.appendChild(row2);
+  body.appendChild(row2);
 
   // Notes
   const notes = document.createElement('textarea');
@@ -2572,7 +2841,7 @@ function buildAccommodation(city, acc) {
   notes.placeholder = 'Notes — pros, cons, host responses…';
   notes.value = acc.notes || '';
   notes.onblur = () => updateAccom(cityId, accId, 'notes', notes.value);
-  item.appendChild(notes);
+  body.appendChild(notes);
 
   // Actions
   const actions = document.createElement('div');
@@ -2604,15 +2873,17 @@ function buildAccommodation(city, acc) {
       (acc.cost && nights ? ` (${fmtCurrency(Math.round((acc.cost||0)/nights), acc.currency||'USD')}/night)` : '');
     actions.appendChild(stat);
   }
-  item.appendChild(actions);
+  body.appendChild(actions);
 
   // Fit reasoning note shown below if scored
   if (acc.fit && acc.fit.note) {
     const noteEl = document.createElement('div');
     noteEl.style.cssText = 'grid-column:1/-1;margin-top:6px;padding:8px 10px;background:var(--bg-softer);border-radius:6px;font-size:12px;color:var(--text-2);font-style:italic';
     noteEl.textContent = '★ ' + acc.fit.note;
-    item.appendChild(noteEl);
+    body.appendChild(noteEl);
   }
+
+  item.appendChild(body);
 
   return item;
 }
@@ -2632,6 +2903,243 @@ function buildCitySubsections(city) {
   ];
 
   subs.forEach(sub => wrap.appendChild(buildSubsection(city, sub)));
+  return wrap;
+}
+
+// ==================== CITY RESEARCH (AI) ====================
+
+// Builds the AI prompt that asks for tailored neighborhood/attraction/restaurant/etc. picks
+// based on the traveler's stored profile.
+function buildCityResearchPrompt(city) {
+  const profile = state.profile || '(no profile set — use neutral nomad-friendly defaults)';
+  const cityName = city.name;
+  const country = city.country || 'unspecified country';
+  const dates = (city.checkIn && city.checkOut)
+    ? `${city.checkIn} to ${city.checkOut}`
+    : 'unspecified dates';
+  const nights = city.checkIn && city.checkOut ? nightsBetween(city.checkIn, city.checkOut) : 0;
+
+  const existing = {
+    neighborhoods: (city.neighborhoods || []).map(x => x.name).join(', ') || '(none)',
+    attractions:   (city.attractions   || []).map(x => x.name).join(', ') || '(none)',
+    restaurants:   (city.restaurants   || []).map(x => x.name).join(', ') || '(none)',
+    dayTrips:      (city.dayTrips      || []).map(x => x.name).join(', ') || '(none)',
+    coworking:     (city.coworking     || []).map(x => x.name).join(', ') || '(none)'
+  };
+
+  return `You are a travel research assistant generating tailored destination research for a traveler based on their profile.
+
+TRAVELER PROFILE:
+${profile}
+
+DESTINATION:
+City: ${cityName}
+Country: ${country}
+Dates: ${dates}${nights > 0 ? ` (${nights} nights)` : ''}
+
+ALREADY ADDED — do NOT duplicate these:
+- Neighborhoods: ${existing.neighborhoods}
+- Attractions: ${existing.attractions}
+- Restaurants: ${existing.restaurants}
+- Day trips: ${existing.dayTrips}
+- Coworking: ${existing.coworking}
+
+TASK: Generate 3-5 items in each category, tailored to the traveler's profile. For each item, include a one-sentence note (max ~100 chars) about why it matters or what's special. Use REAL specific names — not generic descriptions.
+
+For NEIGHBORHOODS: focus on lodging areas, balancing the traveler's stated needs (walkability, climate, work-friendliness, beach access, etc.).
+For ATTRACTIONS: prioritize what matches their interests, not just tourist-must-sees.
+For RESTAURANTS: include both signature local spots and reliable everyday picks; mention dish or specialty.
+For DAY TRIPS: only destinations reachable in a single day. Note rough travel time.
+For COWORKING: spaces with reliable wifi and laptop-friendly environments. Include cafés if dedicated coworking is sparse.
+
+Return ONLY valid JSON in this exact format (no markdown fences, no preamble):
+{
+  "neighborhoods": [{"name": "...", "notes": "..."}, ...],
+  "attractions": [{"name": "...", "notes": "..."}, ...],
+  "restaurants": [{"name": "...", "notes": "..."}, ...],
+  "dayTrips": [{"name": "...", "notes": "..."}, ...],
+  "coworking": [{"name": "...", "notes": "..."}, ...]
+}`;
+}
+
+async function runCityResearch(city) {
+  if (state.aiMode !== 'api' || !state.apiKey) {
+    toast('API mode + key required for AI research. Configure in Settings.', 'error');
+    return null;
+  }
+  const prompt = buildCityResearchPrompt(city);
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': state.apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2500,
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error('API error (' + res.status + '): ' + errText.slice(0, 200));
+  }
+  const data = await res.json();
+  if (data.usage) trackAIUsage(data.usage.input_tokens, data.usage.output_tokens);
+  const text = (data.content || []).map(b => b.text || '').join('').trim();
+  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  return { research: JSON.parse(cleaned), usage: data.usage };
+}
+
+// Merges AI research into the city's sublists, deduping by name (case-insensitive).
+// Tags each new item with source: 'ai:<date>' for provenance.
+function applyCityResearch(city, research) {
+  const source = `ai:${todayISO()}`;
+  let totalAdded = 0;
+  const keys = ['neighborhoods', 'attractions', 'restaurants', 'dayTrips', 'coworking'];
+  keys.forEach(key => {
+    const items = research[key] || [];
+    if (!Array.isArray(items)) return;
+    if (!city[key]) city[key] = [];
+    const existingNames = new Set(city[key].map(x => (x.name || '').toLowerCase().trim()));
+    items.forEach(it => {
+      if (!it || !it.name) return;
+      const nameLower = it.name.toLowerCase().trim();
+      if (existingNames.has(nameLower)) return;
+      city[key].push({
+        id: newId(),
+        name: it.name,
+        notes: it.notes || '',
+        source: source
+      });
+      existingNames.add(nameLower);
+      totalAdded++;
+    });
+  });
+  return totalAdded;
+}
+
+function openCityResearchModal(city) {
+  if (state.aiMode !== 'api' || !state.apiKey) {
+    toast('AI research needs API mode + key. Configure in Settings → AI Mode.', 'error');
+    return;
+  }
+  if (!city.name || !city.country) {
+    toast('City needs a name and country before AI research can run.', 'error');
+    return;
+  }
+
+  // Pre-flight: check if Travel Profile has enough specificity to drive personalization
+  const profileCheck = assessProfileQuality(state.profile || '');
+  if (profileCheck.tooThin) {
+    const proceed = confirm(
+      `⚠️ Your Travel Profile is light on detail.\n\n` +
+      `${profileCheck.summary}\n\n` +
+      `${profileCheck.missing.length > 0 ? `Missing dimensions: ${profileCheck.missing.join(', ')}\n\n` : ''}` +
+      `Without specifics, AI research falls back to generic recommendations that any tourist would get.\n\n` +
+      `OK = proceed anyway · Cancel = strengthen Travel Profile first (Settings → Travel Profile)`
+    );
+    if (!proceed) {
+      // Scroll to profile section
+      document.querySelector('#profile-area')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      document.querySelector('#profile-area')?.focus();
+      return;
+    }
+  }
+
+  // Estimate cost
+  const profileLen = (state.profile || '').length / 4;
+  const estInput = 500 + Math.ceil(profileLen);
+  const estOutput = 1800; // ~25 items × ~70 tokens each
+  const estCost = estimateCost(estInput, estOutput);
+
+  const existingCount = ['neighborhoods','attractions','restaurants','dayTrips','coworking']
+    .reduce((sum, k) => sum + ((city[k] || []).length), 0);
+
+  const msg = `Generate AI research for ${city.name}?\n\n` +
+    `Will add 3-5 items each across:\n` +
+    `  • Neighborhoods (lodging picks)\n` +
+    `  • Attractions / must-do\n` +
+    `  • Restaurants\n` +
+    `  • Day trips\n` +
+    `  • Coworking\n\n` +
+    `Tailored to your Travel Profile. ` +
+    (existingCount > 0 ? `Won't duplicate the ${existingCount} item${existingCount===1?'':'s'} already added.\n\n` : '\n') +
+    `Estimated cost: ${fmtCost(estCost)}\n` +
+    `Estimated tokens: ~${(estInput + estOutput).toLocaleString()}`;
+
+  if (!confirm(msg)) return;
+  doCityResearch(city);
+}
+
+// Heuristic check for whether a Travel Profile is specific enough to yield personalized AI output.
+// Checks for length + presence of key personalization dimensions.
+function assessProfileQuality(profile) {
+  const text = (profile || '').toLowerCase();
+  const length = text.length;
+  const result = { tooThin: false, summary: '', missing: [] };
+
+  // Length check: < 200 chars is almost certainly too generic
+  if (length < 200) {
+    result.tooThin = true;
+    result.summary = `Profile is ${length} character${length===1?'':'s'} (recommend 400+).`;
+  }
+
+  // Dimension check: look for key topics that drive personalization
+  const dimensions = [
+    { key: 'climate', patterns: ['climate', '°c', '°f', 'temperature', 'humid', 'tropical', 'mediterranean', 'cool', 'warm', 'hot'] },
+    { key: 'work style', patterns: ['work', 'remote', 'nomad', 'wifi', 'coworking', 'office', 'meeting', 'call'] },
+    { key: 'budget', patterns: ['budget', '$', 'cheap', 'affordable', 'cost', 'expensive', 'luxury', 'mid-range', 'spend'] },
+    { key: 'interests', patterns: ['enjoy', 'interest', 'love', 'prefer', 'hobby', 'food', 'culture', 'music', 'art', 'hike', 'beach', 'nature'] },
+    { key: 'constraints', patterns: ['avoid', 'never', 'cannot', 'must not', 'hard constraint', 'no ', 'allerg', 'medical'] }
+  ];
+  dimensions.forEach(d => {
+    const found = d.patterns.some(p => text.includes(p));
+    if (!found) result.missing.push(d.key);
+  });
+
+  if (result.missing.length >= 3) {
+    result.tooThin = true;
+    if (!result.summary) result.summary = `Profile covers ${dimensions.length - result.missing.length} of ${dimensions.length} key dimensions.`;
+  }
+
+  if (!result.summary) result.summary = `Profile looks reasonable (${length} chars, ${dimensions.length - result.missing.length}/${dimensions.length} dimensions).`;
+
+  return result;
+}
+
+async function doCityResearch(city) {
+  toast(`🧠 Generating research for ${city.name}…`, 'ok');
+  try {
+    const result = await runCityResearch(city);
+    if (!result) return;
+    const added = applyCityResearch(city, result.research);
+    saveState();
+    renderAll();
+    const tokens = result.usage ? `· ${(result.usage.input_tokens + result.usage.output_tokens).toLocaleString()} tokens` : '';
+    const cost = result.usage ? `· ${fmtCost(estimateCost(result.usage.input_tokens, result.usage.output_tokens))}` : '';
+    toast(`✓ Added ${added} research item${added===1?'':'s'} to ${city.name} ${tokens} ${cost}`, 'ok');
+  } catch(e) {
+    console.error('Research generation failed:', e);
+    toast(`Research failed: ${e.message}`, 'error');
+  }
+}
+
+function buildResearchButton(city) {
+  const wrap = document.createElement('div');
+  wrap.className = 'research-row';
+  const left = document.createElement('div');
+  left.style.cssText = 'flex:1;min-width:200px';
+  left.innerHTML = `<div style="font-weight:500;font-size:14px;margin-bottom:2px">🧠 Generate AI research</div>
+    <div style="font-size:12px;color:var(--text-3);line-height:1.5">Populate neighborhoods, attractions, restaurants, day trips & coworking based on your Travel Profile. ~$0.05-0.08 per run.</div>`;
+  wrap.appendChild(left);
+  const btn = document.createElement('button');
+  btn.className = 'btn-secondary';
+  btn.textContent = '🧠 Generate';
+  btn.onclick = () => openCityResearchModal(city);
+  wrap.appendChild(btn);
   return wrap;
 }
 
@@ -2694,15 +3202,19 @@ function buildSubItem(city, sub, item) {
   const cityId = city.id;
   const itemId = item.id;
   const wrap = document.createElement('div');
-  wrap.className = 'sub-item';
+  wrap.className = 'sub-item' + (item.source && item.source.startsWith('ai:') ? ' ai-sourced' : '');
 
   const main = document.createElement('div');
   main.className = 'sub-item-main';
+
+  const nameRow = document.createElement('div');
+  nameRow.style.cssText = 'display:flex;align-items:center;gap:6px';
 
   const name = document.createElement('div');
   name.className = 'sub-item-name';
   name.contentEditable = 'true';
   name.textContent = item.name || '';
+  name.style.flex = '1';
   name.addEventListener('blur', () => {
     const v = name.textContent.trim();
     updateSubItem(cityId, sub.key, itemId, 'name', v);
@@ -2710,7 +3222,18 @@ function buildSubItem(city, sub, item) {
   name.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); name.blur(); }
   });
-  main.appendChild(name);
+  nameRow.appendChild(name);
+
+  // AI provenance badge
+  if (item.source && item.source.startsWith('ai:')) {
+    const badge = document.createElement('span');
+    badge.textContent = '✦ AI';
+    badge.title = 'Generated by AI on ' + item.source.slice(3);
+    badge.style.cssText = 'font-family:\'JetBrains Mono\',monospace;font-size:9px;color:var(--accent);background:var(--accent-soft,#fce8e9);padding:2px 5px;border-radius:3px;letter-spacing:0.05em;cursor:help;flex-shrink:0';
+    nameRow.appendChild(badge);
+  }
+
+  main.appendChild(nameRow);
 
   const meta = document.createElement('div');
   meta.className = 'sub-item-meta';
@@ -5375,6 +5898,22 @@ const promotedCount = backfillCityStatusFromAccommodations();
 if (promotedCount > 0) {
   saveState();
 }
+
+// Auto-expand current city (the one elevated in "Where you are") so research is visible
+// on first load. After this, user can collapse and it stays collapsed within the session.
+(function autoOpenCurrentCity() {
+  const todayStr = todayISO();
+  state.cities.forEach(c => {
+    if (c.checkIn && c.checkOut && c.checkIn <= todayStr && c.checkOut > todayStr) {
+      openCityIds.add(c.id);
+    }
+  });
+})();
+
+// Wire up the add-city date pair (check-in/out validation)
+const addInEl = document.getElementById('add-city-checkin');
+const addOutEl = document.getElementById('add-city-checkout');
+linkDatePair(addInEl, addOutEl);
 
 populateCountries();
 setupProfile();
