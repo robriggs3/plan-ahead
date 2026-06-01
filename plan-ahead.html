@@ -3838,14 +3838,14 @@ function buildFamilyShareHTML(payload) {
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 36px 20px 60px; -webkit-font-smoothing: antialiased; }
 .doc { max-width: 880px; margin: 0 auto; }
-.hero { margin-bottom: 36px; padding-bottom: 28px; border-bottom: 1px solid var(--border); position: relative; }
+.hero { margin-bottom: 36px; padding: 48px 0 28px; border-bottom: 1px solid var(--border); position: relative; }
 .hero::before { content: 'TRAVEL TRACKER'; position: absolute; top: 0; left: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); letter-spacing: 0.28em; padding: 5px 11px; border: 1px solid var(--accent); border-radius: 2px; }
-.hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: 56px; font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; margin-top: 48px; }
+.hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: 56px; font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; }
 .hero h1 .em { color: var(--accent); font-style: italic; font-weight: 500; }
 .hero .sub { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.16em; text-transform: uppercase; }
 .hero .gen-date { position: absolute; top: 0; right: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
 .current-banner { background: var(--bg-card); border: 1px solid var(--accent); border-radius: 12px; box-shadow: 0 4px 20px rgba(199,32,39,0.10), 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 32px; position: relative; padding: 38px 28px 24px; }
-.current-banner::before { content: '\\25CF You\\'re here'; position: absolute; top: 0; left: 0; background: var(--accent); color: white; padding: 5px 14px; border-radius: 0 0 8px 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
+.current-banner::before { content: '● You\\'re here'; position: absolute; top: 0; left: 0; background: var(--accent); color: white; padding: 5px 14px; border-radius: 0 0 8px 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
 .current-banner h2 { font-family: 'Fraunces', Georgia, serif; font-size: 32px; font-weight: 500; line-height: 1.15; }
 .current-banner h2 .country { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.12em; font-weight: 400; text-transform: uppercase; margin-left: 12px; vertical-align: middle; }
 .current-banner .dates { margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-2); letter-spacing: 0.04em; }
@@ -3884,7 +3884,8 @@ footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border
 footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(--text-3); border-radius: 3px; margin-bottom: 10px; }
 @media (max-width: 600px) {
   body { padding: 24px 14px 50px; }
-  .hero h1 { font-size: 38px; margin-top: 56px; }
+  .hero { padding-top: 56px; }
+  .hero h1 { font-size: 38px; }
   .hero .gen-date { position: static; display: block; margin-top: 8px; }
   .current-banner { padding: 36px 20px 20px; }
   .current-banner h2 { font-size: 24px; }
@@ -3900,8 +3901,8 @@ footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(
 <div class="doc">
   <header class="hero">
     <div class="gen-date" id="gen-date"></div>
-    <h1>${escapeHTML(payload.travelerName)} \\u00b7 <span class="em">on the move</span></h1>
-    <div class="sub" id="cover-meta">Loading\\u2026</div>
+    <h1>${escapeHTML(payload.travelerName)} · <span class="em">on the move</span></h1>
+    <div class="sub" id="cover-meta">Loading…</div>
   </header>
 
   <div id="current-section"></div>
@@ -3914,7 +3915,7 @@ footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(
   <div id="past-section"></div>
 
   <footer>
-    <div class="stamp">Eyes only \\u00b7 For family</div>
+    <div class="stamp">Eyes only · For family</div>
     <div id="footer-meta"></div>
   </footer>
 </div>
@@ -3924,7 +3925,7 @@ const DATA = ${data};
 const TODAY = new Date().toISOString().slice(0,10);
 
 function fmtDate(iso) {
-  if (!iso) return '\\u2014';
+  if (!iso) return '—';
   const d = new Date(iso + 'T12:00:00');
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
@@ -3955,9 +3956,9 @@ function renderAccoms(accoms, isCurrentCity) {
   return list.map(a => {
     const isCurrentAccom = isCurrentCity && isCurrentAccommodation(a);
     const cls = 'accom-item' + (isCurrentAccom ? ' current' : '');
-    const linkBit = a.link ? ' \\u00b7 <a href="' + escapeHTML(a.link) + '" target="_blank" rel="noopener">view booking</a>' : '';
-    const nbhdBit = a.neighborhood ? escapeHTML(a.neighborhood) + ' \\u00b7 ' : '';
-    const datesBit = a.checkIn && a.checkOut ? fmtDate(a.checkIn) + ' \\u2192 ' + fmtDate(a.checkOut) : '';
+    const linkBit = a.link ? ' · <a href="' + escapeHTML(a.link) + '" target="_blank" rel="noopener">view booking</a>' : '';
+    const nbhdBit = a.neighborhood ? escapeHTML(a.neighborhood) + ' · ' : '';
+    const datesBit = a.checkIn && a.checkOut ? fmtDate(a.checkIn) + ' → ' + fmtDate(a.checkOut) : '';
     return '<div class="' + cls + '"><div class="accom-name">' + escapeHTML(a.name) + '</div><div class="accom-meta">' + nbhdBit + datesBit + linkBit + '</div></div>';
   }).join('');
 }
@@ -3980,17 +3981,17 @@ function render() {
   past.sort((a,b) => (b.checkIn||'').localeCompare(a.checkIn||''));
   future.sort((a,b) => (a.checkIn||'').localeCompare(b.checkIn||''));
 
-  const totalLabel = DATA.cities.length + ' stops \\u00b7 ' + past.length + ' past \\u00b7 ' + (current ? '1 current \\u00b7 ' : '') + future.length + ' upcoming';
+  const totalLabel = DATA.cities.length + ' stops · ' + past.length + ' past · ' + (current ? '1 current · ' : '') + future.length + ' upcoming';
   document.getElementById('cover-meta').textContent = totalLabel;
   document.getElementById('gen-date').textContent = 'Updated ' + new Date(DATA.generatedAt).toLocaleDateString('en-US', {month:'short', day:'numeric'});
-  document.getElementById('footer-meta').textContent = 'Auto-updating \\u00b7 Last refresh on visit';
+  document.getElementById('footer-meta').textContent = 'Auto-updating · Last refresh on visit';
 
   const cs = document.getElementById('current-section');
   if (current) {
     const daysLeft = Math.round((new Date(current.checkOut + 'T00:00:00') - new Date(TODAY + 'T00:00:00')) / 86400000);
-    cs.innerHTML = '<div class="current-banner"><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' \\u00b7 ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' \\u2192 ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + (current.accommodations.length ? '<div class="accom-block"><div class="accom-label">Where they\\'re staying</div>' + renderAccoms(current.accommodations, true) + '</div>' : '') + '</div>';
+    cs.innerHTML = '<div class="current-banner"><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + (current.accommodations.length ? '<div class="accom-block"><div class="accom-label">Where they\\'re staying</div>' + renderAccoms(current.accommodations, true) + '</div>' : '') + '</div>';
   } else {
-    cs.innerHTML = '<div class="current-banner" style="border-color:var(--border);box-shadow:var(--shadow-sm);padding-top:24px"><div style="text-align:center;color:var(--text-3);font-style:italic;font-family:Fraunces,serif;font-size:18px">Between stays \\u2014 see upcoming below</div></div>';
+    cs.innerHTML = '<div class="current-banner" style="border-color:var(--border);box-shadow:var(--shadow-sm);padding-top:24px"><div style="text-align:center;color:var(--text-3);font-style:italic;font-family:Fraunces,serif;font-size:18px">Between stays — see upcoming below</div></div>';
   }
 
   document.getElementById('map-legend').innerHTML =
@@ -4019,7 +4020,7 @@ function render() {
 
 function buildLeg(c, isPast) {
   const cls = isPast ? 'leg past' : 'leg';
-  return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' \\u00b7 ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' \\u2192 ' + fmtDate(c.checkOut) + '</div></div>' + (c.accommodations.length ? '<div class="leg-accom">' + renderAccoms(c.accommodations, false) + '</div>' : '') + '</div>';
+  return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div></div>' + (c.accommodations.length ? '<div class="leg-accom">' + renderAccoms(c.accommodations, false) + '</div>' : '') + '</div>';
 }
 
 function initMap(cities, current) {
@@ -4036,9 +4037,9 @@ function initMap(cities, current) {
     const color = colorFor(c, isCurrent);
     const radius = isCurrent ? 12 : 7;
     const marker = L.circleMarker([c.lat, c.lng], { radius: radius, color: 'white', weight: 2, fillColor: color, fillOpacity: 0.95 }).addTo(map);
-    const datesBit = c.checkIn ? '<br><small style="font-family:JetBrains Mono,monospace;color:#666">' + fmtDate(c.checkIn) + ' \\u2192 ' + fmtDate(c.checkOut) + '</small>' : '';
+    const datesBit = c.checkIn ? '<br><small style="font-family:JetBrains Mono,monospace;color:#666">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</small>' : '';
     const statusBit = !isCurrent && c.status ? '<br><small style="color:' + color + ';font-weight:600;text-transform:uppercase;letter-spacing:0.08em;font-family:JetBrains Mono,monospace;font-size:9px">' + c.status + '</small>' : '';
-    marker.bindPopup('<strong style="font-family:Fraunces,serif;font-size:15px">' + escapeHTML(c.name) + '</strong><br><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:#666;letter-spacing:0.08em;text-transform:uppercase">' + escapeHTML(c.country) + '</span>' + datesBit + statusBit + (isCurrent ? '<br><strong style="color:#c72027;font-family:JetBrains Mono,monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase">\\u2605 Currently here</strong>' : ''));
+    marker.bindPopup('<strong style="font-family:Fraunces,serif;font-size:15px">' + escapeHTML(c.name) + '</strong><br><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:#666;letter-spacing:0.08em;text-transform:uppercase">' + escapeHTML(c.country) + '</span>' + datesBit + statusBit + (isCurrent ? '<br><strong style="color:#c72027;font-family:JetBrains Mono,monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase">★ Currently here</strong>' : ''));
     bounds.push([c.lat, c.lng]);
   });
   if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40] });
