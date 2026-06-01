@@ -1110,9 +1110,65 @@
         </div>
         <div id="data-status" class="muted" style="margin-top:10px;min-height:18px">Auto-saved continuously to your browser. Export regularly — browser data can be wiped.</div>
         <div id="snapshots-block" style="display:none;margin-top:14px">
-          <label style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:8px;display:block">Snapshot history (auto, every 10 min)</label>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+            <label style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3)">Snapshot history</label>
+            <button class="btn-secondary" onclick="promptManualSnapshot()" style="font-size:11px;padding:4px 10px">+ Take snapshot now</button>
+          </div>
+          <div style="font-size:11px;color:var(--text-3);margin-bottom:8px;font-family:'JetBrains Mono',monospace">Auto: 1/day · max 7 · Manual: max 10 · Safety snapshots taken before destructive actions</div>
           <div id="snapshots-list" style="display:flex;flex-direction:column;gap:6px"></div>
         </div>
+      </div>
+
+      <div class="setting-card">
+        <h3>Share with family</h3>
+        <div class="muted" style="margin-bottom:10px">Generate a standalone HTML file showing your travel plan (no budgets) for family to track your whereabouts. Self-updating: each visit recalculates past / current / future based on visit date.</div>
+
+        <div style="margin-bottom:14px">
+          <label style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);display:block;margin-bottom:4px">Your name (shown on share page)</label>
+          <input class="text-input" id="traveler-name-input" placeholder="e.g. Rob" style="max-width:280px" oninput="updateTravelerName(this.value)">
+        </div>
+
+        <div class="setting-actions">
+          <button class="btn-secondary green" onclick="generateFamilyShare()">📍 Download HTML</button>
+          <button class="btn-secondary" onclick="publishFamilyShare()">🚀 Publish to GitHub</button>
+          <button class="btn-secondary" onclick="toggleGithubSetup()">⚙ GitHub setup</button>
+        </div>
+
+        <div id="github-setup-block" style="display:none;margin-top:14px;padding:14px;background:var(--bg-softer);border:1px dashed var(--border);border-radius:8px">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:10px">GitHub publishing setup</div>
+          <div style="font-size:12px;color:var(--text-2);line-height:1.6;margin-bottom:12px">
+            1. Go to <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener" style="color:var(--accent)">github.com/settings/tokens</a> → "Generate new token (fine-grained)"<br>
+            2. Set <strong>Repository access → Only select repositories</strong> → pick your plan-ahead repo<br>
+            3. Set <strong>Repository permissions → Contents → Read and write</strong><br>
+            4. Set short expiration (90 days recommended); copy the token<br>
+            5. Paste below. Token is stored in your browser only — never sent to anywhere except api.github.com.
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+            <div>
+              <label style="font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;font-family:'JetBrains Mono',monospace">GitHub username</label>
+              <input class="text-input" id="github-user-input" placeholder="e.g. robriggs3" oninput="updateGithubField('githubUser', this.value)">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;font-family:'JetBrains Mono',monospace">Repo name</label>
+              <input class="text-input" id="github-repo-input" placeholder="e.g. plan-ahead" oninput="updateGithubField('githubRepo', this.value)">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;font-family:'JetBrains Mono',monospace">File path (in repo)</label>
+              <input class="text-input" id="github-file-input" placeholder="family.html" oninput="updateGithubField('githubFile', this.value)">
+            </div>
+            <div>
+              <label style="font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:0.05em;font-family:'JetBrains Mono',monospace">Personal access token</label>
+              <input class="text-input" id="github-token-input" type="password" placeholder="github_pat_..." oninput="updateGithubField('githubToken', this.value)">
+            </div>
+          </div>
+
+          <div style="font-size:11px;color:var(--text-3);font-family:'JetBrains Mono',monospace;margin-top:6px">
+            <strong style="color:var(--accent)">Security:</strong> token has commit access to the selected repo. Revoke anytime at github.com/settings/tokens. Use fine-grained scope, never classic.
+          </div>
+        </div>
+
+        <div id="family-share-status" class="muted" style="margin-top:10px;min-height:18px"></div>
       </div>
     </div>
   </section>
@@ -1256,9 +1312,9 @@
 'use strict';
 
 const STORAGE_KEY = 'planahead:v1';
-const SNAPSHOTS_KEY = 'planahead:snapshots';
-const MAX_SNAPSHOTS = 5;
-const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const SNAPSHOTS_KEY = 'planahead:v1:snapshots';
+const MAX_AUTO_SNAPSHOTS = 7;    // daily auto rolling — about a week
+const MAX_MANUAL_SNAPSHOTS = 10; // generous cap for user snapshots
 
 // ==================== CONSTANTS ====================
 
@@ -1442,7 +1498,13 @@ function defaultState() {
     aiUsage: { date: '', inputTokens: 0, outputTokens: 0 },
     dismissedGaps: [],
     budgetMonthlyTarget: 0,
-    lastSession: ''
+    lastSession: '',
+    travelerName: '',
+    githubToken: '',
+    githubUser: '',
+    githubRepo: '',
+    githubFile: 'family.html',
+    lastPublishedAt: ''
   };
 }
 
@@ -1490,46 +1552,134 @@ let state = loadState();
 function saveState() {
   state.lastSession = new Date().toISOString();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  maybeSnapshot();
   showSaved();
   updateHero();
 }
 
-// Snapshot history: keep last N versions in localStorage, taken at most once per interval.
-// Provides recovery from bad imports, accidental resets, or corrupted state.
-let _lastSnapshotAt = 0;
-function maybeSnapshot() {
-  const now = Date.now();
-  if (now - _lastSnapshotAt < SNAPSHOT_INTERVAL_MS) return;
-  _lastSnapshotAt = now;
-  try {
-    let snaps = JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
-    snaps.unshift({ ts: new Date().toISOString(), data: state });
-    snaps = snaps.slice(0, MAX_SNAPSHOTS);
-    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps));
-  } catch(e) {
-    console.warn('Snapshot save failed', e);
-  }
-}
+// ==================== SNAPSHOTS ====================
+// Snapshot system: separate localStorage key so corruption of main state can't kill recovery.
+// Two kinds of snapshots:
+//   - AUTO: one per calendar day, rolling cap of 7 (about a week of recovery)
+//   - MANUAL: user-triggered with a label, capped at 10
+// Safety snapshot pattern: before any destructive op (import, restore, reset), an auto-labeled
+// manual snapshot is taken first. The contract: no single action can permanently destroy data.
+
+function _deepClone(obj) { return JSON.parse(JSON.stringify(obj)); }
 
 function loadSnapshots() {
   try {
-    return JSON.parse(localStorage.getItem(SNAPSHOTS_KEY) || '[]');
+    const raw = localStorage.getItem(SNAPSHOTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    // Migrate legacy format { ts, data } → new format { id, name, createdAt, isAuto, data }
+    return parsed.map(s => {
+      if (s.id && s.createdAt) return s; // already new format
+      return {
+        id: s.id || newId(),
+        name: s.name || 'Auto (legacy)',
+        createdAt: s.createdAt || s.ts || new Date().toISOString(),
+        isAuto: s.isAuto !== undefined ? s.isAuto : true,
+        data: s.data
+      };
+    });
   } catch(e) {
+    console.error('Could not load snapshots', e);
     return [];
   }
 }
 
-function restoreSnapshot(ts) {
-  const snaps = loadSnapshots();
-  const snap = snaps.find(s => s.ts === ts);
+function saveSnapshotsArray(snaps) {
+  try {
+    localStorage.setItem(SNAPSHOTS_KEY, JSON.stringify(snaps));
+  } catch(e) {
+    toast('Could not save snapshot — localStorage may be full. Export and delete old snapshots.', 'error');
+  }
+}
+
+// Called once per page load. Creates today's auto-snapshot if there isn't one yet.
+// Caps total autos at MAX_AUTO_SNAPSHOTS, oldest evicted first.
+function ensureDailyAutoSnapshot() {
+  const snapshots = loadSnapshots();
+  const today = new Date().toISOString().slice(0, 10);
+  const hasToday = snapshots.some(s => s.isAuto && s.createdAt.slice(0, 10) === today);
+  if (hasToday) return;
+
+  snapshots.push({
+    id: newId(),
+    name: 'Daily auto',
+    createdAt: new Date().toISOString(),
+    isAuto: true,
+    data: _deepClone(state)
+  });
+
+  // Cap autos at MAX_AUTO_SNAPSHOTS, oldest first
+  const autos = snapshots.filter(s => s.isAuto).sort((a,b) => a.createdAt.localeCompare(b.createdAt));
+  while (autos.length > MAX_AUTO_SNAPSHOTS) {
+    const oldest = autos.shift();
+    const idx = snapshots.findIndex(s => s.id === oldest.id);
+    if (idx >= 0) snapshots.splice(idx, 1);
+  }
+  saveSnapshotsArray(snapshots);
+}
+
+// Manual snapshot with user-supplied or auto-generated label.
+// Returns true if taken, false if cancelled (e.g. cap reached and user declined eviction).
+function takeManualSnapshot(label) {
+  const snapshots = loadSnapshots();
+  const manuals = snapshots.filter(s => !s.isAuto);
+
+  if (manuals.length >= MAX_MANUAL_SNAPSHOTS) {
+    if (!confirm(`You have ${manuals.length} manual snapshots (cap: ${MAX_MANUAL_SNAPSHOTS}). Delete the oldest to make room for "${label}"?`)) return false;
+    const oldest = manuals.sort((a,b) => a.createdAt.localeCompare(b.createdAt))[0];
+    const idx = snapshots.findIndex(s => s.id === oldest.id);
+    if (idx >= 0) snapshots.splice(idx, 1);
+  }
+
+  snapshots.push({
+    id: newId(),
+    name: label || 'Manual snapshot',
+    createdAt: new Date().toISOString(),
+    isAuto: false,
+    data: _deepClone(state)
+  });
+  saveSnapshotsArray(snapshots);
+  return true;
+}
+
+function restoreSnapshot(id) {
+  const snapshots = loadSnapshots();
+  const snap = snapshots.find(s => s.id === id || s.createdAt === id); // back-compat for old ts param
   if (!snap) { toast('Snapshot not found.', 'error'); return; }
-  if (armConfirm('restoreSnap:' + ts, 'Click "Restore" again to replace current data with this snapshot.')) return;
+  const when = new Date(snap.createdAt).toLocaleString();
+  if (!confirm(`Restore from "${snap.name}" (${when})?\n\nCurrent data will be replaced. A safety snapshot of current data will be taken first.`)) return;
+
+  takeManualSnapshot('Before restoring "' + snap.name + '"');
   state = Object.assign(defaultState(), snap.data);
   openCityIds = new Set();
   saveState();
   renderAll();
-  toast('Restored snapshot from ' + new Date(ts).toLocaleString(), 'ok');
+  toast(`Restored "${snap.name}". Previous data kept as safety snapshot.`, 'ok');
+  renderSnapshots();
+}
+
+function deleteSnapshot(id) {
+  const snapshots = loadSnapshots();
+  const snap = snapshots.find(s => s.id === id);
+  if (!snap) return;
+  if (!confirm(`Delete snapshot "${snap.name}"? Cannot be undone.`)) return;
+  const filtered = snapshots.filter(s => s.id !== id);
+  saveSnapshotsArray(filtered);
+  renderSnapshots();
+  toast('Snapshot deleted.', 'ok');
+}
+
+function promptManualSnapshot() {
+  const label = prompt('Snapshot label (e.g. "Before reorganizing"):', 'Manual snapshot');
+  if (label === null) return;
+  const ok = takeManualSnapshot(label.trim() || 'Manual snapshot');
+  if (ok) {
+    toast(`✓ Snapshot saved: "${label.trim() || 'Manual snapshot'}"`, 'ok');
+    renderSnapshots();
+  }
 }
 
 const savedEl = document.getElementById('saved');
@@ -3432,15 +3582,414 @@ function renderSettings() {
   document.getElementById('api-key-input').value = state.apiKey || '';
   const budgetInput = document.getElementById('budget-target-input');
   if (budgetInput) budgetInput.value = state.budgetMonthlyTarget || '';
+  const nameInput = document.getElementById('traveler-name-input');
+  if (nameInput) nameInput.value = state.travelerName || '';
+  // Show "last published" indicator if we've published before
+  const statusEl = document.getElementById('family-share-status');
+  if (statusEl && state.lastPublishedAt && !statusEl.textContent.trim()) {
+    const when = new Date(state.lastPublishedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const url = state.githubUser && state.githubRepo
+      ? `https://${state.githubUser}.github.io/${state.githubRepo}/${state.githubFile || 'family.html'}`
+      : '';
+    statusEl.innerHTML = `Last published: ${when}` + (url ? ` · <a href="${url}" target="_blank" rel="noopener" style="color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:12px">${url}</a>` : '');
+    statusEl.style.color = 'var(--text-3)';
+  }
   renderAIUsage();
 }
 
-function exportData() {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+// ==================== FAMILY SHARE ====================
+// Generates a self-contained HTML file family members can use to track travel.
+// Strips budgets/costs/private notes. Includes embedded data + Leaflet map.
+// Self-updating: JS recomputes past/current/future based on visit date on every load.
+
+function updateTravelerName(v) {
+  state.travelerName = v.trim();
+  saveState();
+}
+
+function updateGithubField(field, v) {
+  state[field] = v.trim();
+  saveState();
+}
+
+function toggleGithubSetup() {
+  const block = document.getElementById('github-setup-block');
+  block.style.display = block.style.display === 'none' ? 'block' : 'none';
+  if (block.style.display !== 'none') {
+    // populate fields from state
+    const inputs = {
+      'traveler-name-input': 'travelerName',
+      'github-user-input': 'githubUser',
+      'github-repo-input': 'githubRepo',
+      'github-file-input': 'githubFile',
+      'github-token-input': 'githubToken'
+    };
+    Object.entries(inputs).forEach(([id, key]) => {
+      const el = document.getElementById(id);
+      if (el) el.value = state[key] || (key === 'githubFile' ? 'family.html' : '');
+    });
+  }
+}
+
+// Build the family share HTML for current state (extracted from generateFamilyShare so
+// both download and publish paths use the same logic).
+function buildFamilyShareForCurrentState() {
+  const cities = (state.cities || []).map(c => ({
+    name: c.name || '',
+    country: c.country || '',
+    state: c.state || '',
+    status: c.status || 'tentative',
+    checkIn: c.checkIn || '',
+    checkOut: c.checkOut || '',
+    lat: c.lat,
+    lng: c.lng,
+    accommodations: (c.accommodations || [])
+      .filter(a => a.status === 'booked' || a.status === 'shortlisted')
+      .map(a => ({
+        name: a.name || '',
+        neighborhood: a.neighborhood || '',
+        link: a.link || '',
+        status: a.status || ''
+      }))
+  })).filter(c => c.name);
+
+  return buildFamilyShareHTML({
+    travelerName: (state.travelerName || '').trim() || 'Your traveler',
+    generatedAt: new Date().toISOString(),
+    cities: cities
+  });
+}
+
+function generateFamilyShare() {
+  const html = buildFamilyShareForCurrentState();
+  const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'plan-ahead-' + todayISO() + '.json';
+  a.download = 'family-share-' + todayISO() + '.html';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+
+  const cityCount = (state.cities || []).filter(c => c.name).length;
+  const el = document.getElementById('family-share-status');
+  if (el) {
+    el.innerHTML = `✓ Downloaded <strong>family-share-${todayISO()}.html</strong> with ${cityCount} cities. To share: set up GitHub publishing above for one-click updates.`;
+    el.style.color = 'var(--green)';
+  }
+}
+
+// Publish the family share HTML directly to a GitHub repo via the GitHub API.
+// Same URL each time → family's bookmark stays valid forever.
+async function publishFamilyShare() {
+  const statusEl = document.getElementById('family-share-status');
+  function setStatus(msg, kind) {
+    if (!statusEl) return;
+    statusEl.innerHTML = msg;
+    statusEl.style.color = kind === 'error' ? 'var(--accent)' : kind === 'ok' ? 'var(--green)' : 'var(--text-3)';
+  }
+
+  // Validate setup
+  const missing = [];
+  if (!state.githubToken) missing.push('token');
+  if (!state.githubUser) missing.push('username');
+  if (!state.githubRepo) missing.push('repo');
+  if (missing.length > 0) {
+    setStatus(`Set up GitHub publishing first (missing: ${missing.join(', ')}). Click ⚙ GitHub setup.`, 'error');
+    document.getElementById('github-setup-block').style.display = 'block';
+    return;
+  }
+  const file = state.githubFile || 'family.html';
+
+  setStatus('🚀 Publishing to GitHub…', '');
+
+  try {
+    const html = buildFamilyShareForCurrentState();
+    // GitHub API needs base64-encoded content; handle UTF-8 properly
+    const contentB64 = btoa(unescape(encodeURIComponent(html)));
+
+    // Step 1: Get the existing file's SHA (required for updates). 404 means new file.
+    const apiBase = `https://api.github.com/repos/${state.githubUser}/${state.githubRepo}/contents/${file}`;
+    let sha = null;
+    try {
+      const getRes = await fetch(apiBase, {
+        headers: {
+          'Authorization': `Bearer ${state.githubToken}`,
+          'Accept': 'application/vnd.github+json'
+        }
+      });
+      if (getRes.ok) {
+        const existing = await getRes.json();
+        sha = existing.sha;
+      } else if (getRes.status === 404) {
+        // file doesn't exist yet — that's fine, sha stays null
+      } else if (getRes.status === 401) {
+        throw new Error('Token rejected (401). Check that the PAT is valid and has Contents read+write permission.');
+      } else if (getRes.status === 403) {
+        throw new Error('Forbidden (403). The PAT may not have access to this repo, or rate limit hit.');
+      } else if (getRes.status === 404) {
+        throw new Error(`Repo not found (404). Check username "${state.githubUser}" and repo "${state.githubRepo}".`);
+      }
+    } catch(e) {
+      if (e.message && e.message.startsWith('Token') || e.message.startsWith('Forbidden') || e.message.startsWith('Repo')) throw e;
+      // network/other error — continue, the PUT will fail cleanly if needed
+    }
+
+    // Step 2: PUT to create or update
+    const putRes = await fetch(apiBase, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${state.githubToken}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: sha ? `Update family share (${todayISO()})` : `Create family share`,
+        content: contentB64,
+        sha: sha || undefined
+      })
+    });
+
+    if (!putRes.ok) {
+      const errBody = await putRes.json().catch(() => ({}));
+      throw new Error(errBody.message || `HTTP ${putRes.status}`);
+    }
+
+    // Success — build the public URL and remember
+    const publishedURL = `https://${state.githubUser}.github.io/${state.githubRepo}/${file}`;
+    state.lastPublishedAt = new Date().toISOString();
+    saveState();
+
+    setStatus(
+      `✓ Published! Share this URL with family: <a href="${publishedURL}" target="_blank" rel="noopener" style="color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:12px">${publishedURL}</a> · <span style="color:var(--text-3);font-size:11px">GitHub Pages takes ~1 minute to update.</span>`,
+      'ok'
+    );
+    toast(`✓ Published to GitHub. URL ready to share.`, 'ok');
+  } catch(e) {
+    console.error('Publish failed:', e);
+    setStatus(`Publish failed: ${e.message}. Check the setup form above.`, 'error');
+  }
+}
+
+// Build the complete standalone HTML as a string. Embedded data + JS + map.
+function buildFamilyShareHTML(payload) {
+  const data = JSON.stringify(payload).replace(/<\//g, '<\\/'); // safe for script embed
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHTML(payload.travelerName)} · Travel Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root {
+  --bg: #f5f1e8; --bg-card: #ffffff; --bg-soft: #ebe7dd;
+  --border: #d4cdb8; --border-light: #e5e0d0;
+  --text: #1a1a1a; --text-2: #4a4a4a; --text-3: #8a8a8a;
+  --accent: #c72027; --green: #0d8f3f; --green-soft: #e3f3e9;
+  --blue: #2d5fb8; --blue-soft: #e3ebf5; --amber: #c79620; --amber-soft: #f7f0db;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 28px 18px 60px; }
+.doc { max-width: 880px; margin: 0 auto; }
+.cover { text-align: center; padding: 30px 0 36px; border-bottom: 2px solid var(--text); margin-bottom: 36px; position: relative; }
+.cover::before { content: 'TRAVEL TRACKER'; position: absolute; top: 0; left: 50%; transform: translateX(-50%); font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); letter-spacing: 0.3em; padding: 5px 13px; border: 1px solid var(--accent); border-radius: 2px; }
+.cover h1 { font-family: 'Fraunces', Georgia, serif; font-size: 46px; font-weight: 400; font-style: italic; line-height: 1.1; margin-top: 24px; }
+.cover h1 .em { color: var(--accent); font-style: normal; font-weight: 500; }
+.cover .sub { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 14px; }
+.current-banner { background: var(--bg-card); border: 2px solid var(--accent); border-radius: 12px; padding: 20px 26px; box-shadow: 0 4px 16px rgba(199,32,39,0.08); margin-bottom: 32px; position: relative; padding-top: 36px; }
+.current-banner::before { content: '● Currently here'; position: absolute; top: 0; left: 0; background: var(--accent); color: white; padding: 5px 14px; border-radius: 0 0 6px 0; font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; }
+.current-banner h2 { font-family: 'Fraunces', Georgia, serif; font-size: 28px; font-weight: 500; line-height: 1.2; }
+.current-banner .country { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 4px; }
+.current-banner .dates { margin-top: 12px; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text-2); }
+.current-banner .accom { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light); font-size: 13px; color: var(--text-2); }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 36px 0 18px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.section-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 26px; font-weight: 500; font-style: italic; }
+.section-head .meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
+.leg { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 10px; padding: 16px 22px; margin-bottom: 10px; }
+.leg.past { opacity: 0.7; }
+.leg-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.leg-title { font-family: 'Fraunces', Georgia, serif; font-size: 19px; font-weight: 500; }
+.leg-title .country { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.1em; font-weight: 400; margin-left: 8px; text-transform: uppercase; }
+.leg-dates { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-2); }
+.leg-accom { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-light); font-size: 12px; color: var(--text-3); line-height: 1.55; }
+.leg-accom strong { color: var(--text-2); font-weight: 500; }
+.leg-accom a { color: var(--accent); text-decoration: none; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+.pill { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; font-weight: 500; margin-left: 8px; }
+.pill.booked { background: var(--green-soft); color: var(--green); }
+.pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
+.pill.tentative { background: var(--amber-soft); color: var(--amber); }
+#map { height: 380px; border-radius: 10px; border: 1px solid var(--border); margin-bottom: 24px; z-index: 1; }
+footer { margin-top: 50px; padding-top: 18px; border-top: 1px solid var(--border); text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.1em; }
+.empty { color: var(--text-3); font-style: italic; padding: 20px; text-align: center; }
+@media (max-width: 600px) { .cover h1 { font-size: 32px; } .current-banner h2 { font-size: 22px; } #map { height: 280px; } }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="cover">
+    <h1>${escapeHTML(payload.travelerName)} · <span class="em">on the move</span></h1>
+    <div class="sub" id="cover-meta">Loading…</div>
+  </div>
+  <div id="current-section"></div>
+  <div class="section-head"><h2>The map</h2><span class="meta">All stops</span></div>
+  <div id="map"></div>
+  <div id="future-section"></div>
+  <div id="past-section"></div>
+  <footer>Auto-updates on each visit · Generated ${new Date(payload.generatedAt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})}</footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>
+<script>
+const DATA = ${data};
+const TODAY = new Date().toISOString().slice(0,10);
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function escapeHTML(s) {
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderAccom(accoms) {
+  if (!accoms || !accoms.length) return '';
+  const bookedAccoms = accoms.filter(a => a.status === 'booked');
+  const list = bookedAccoms.length > 0 ? bookedAccoms : accoms;
+  return list.map(a => {
+    const linkBit = a.link ? ' · <a href="' + escapeHTML(a.link) + '" target="_blank" rel="noopener">view</a>' : '';
+    const nbhdBit = a.neighborhood ? ' · <em>' + escapeHTML(a.neighborhood) + '</em>' : '';
+    const statusBit = a.status === 'booked' ? '<strong>Staying at:</strong> ' : '<strong>Considering:</strong> ';
+    return '<div>' + statusBit + escapeHTML(a.name) + nbhdBit + linkBit + '</div>';
+  }).join('');
+}
+
+function pill(status) {
+  const valid = ['booked','shortlisted','tentative'];
+  if (!valid.includes(status)) return '';
+  return '<span class="pill ' + status + '">' + status + '</span>';
+}
+
+function render() {
+  // Categorize
+  let current = null;
+  const past = [], future = [];
+  DATA.cities.forEach(c => {
+    if (!c.checkIn || !c.checkOut) { future.push(c); return; }
+    if (c.checkIn <= TODAY && c.checkOut > TODAY) { current = c; return; }
+    if (c.checkOut <= TODAY) past.push(c);
+    else future.push(c);
+  });
+  past.sort((a,b) => (b.checkIn||'').localeCompare(a.checkIn||''));
+  future.sort((a,b) => (a.checkIn||'').localeCompare(b.checkIn||''));
+
+  // Cover meta
+  const totalLabel = DATA.cities.length + ' stops · ' + past.length + ' past · ' + (current ? '1 current · ' : '') + future.length + ' upcoming';
+  document.getElementById('cover-meta').textContent = totalLabel;
+
+  // Current section
+  const cs = document.getElementById('current-section');
+  if (current) {
+    const daysLeft = Math.round((new Date(current.checkOut + 'T00:00:00') - new Date(TODAY + 'T00:00:00')) / 86400000);
+    cs.innerHTML = '<div class="current-banner">' +
+      '<h2>' + escapeHTML(current.name) + '</h2>' +
+      '<div class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</div>' +
+      '<div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + ' · ' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</div>' +
+      (current.accommodations.length ? '<div class="accom">' + renderAccom(current.accommodations) + '</div>' : '') +
+    '</div>';
+  } else {
+    cs.innerHTML = '<div class="current-banner" style="border-color:var(--border);box-shadow:none;padding-top:20px"><div style="text-align:center;color:var(--text-3);font-style:italic">Between stays — see upcoming below</div></div>';
+    cs.querySelector('.current-banner').style.padding = '20px';
+    const b = cs.querySelector('.current-banner');
+    if (b) { b.style.borderColor = 'var(--border)'; b.style.boxShadow = 'none'; }
+  }
+
+  // Future section
+  const fs = document.getElementById('future-section');
+  fs.innerHTML = '<div class="section-head"><h2>What\\'s coming up</h2><span class="meta">' + future.length + ' stop' + (future.length===1?'':'s') + '</span></div>';
+  if (future.length === 0) {
+    fs.innerHTML += '<div class="empty">No upcoming trips planned yet.</div>';
+  } else {
+    future.forEach(c => fs.innerHTML += buildLeg(c, false));
+  }
+
+  // Past section
+  if (past.length > 0) {
+    const ps = document.getElementById('past-section');
+    ps.innerHTML = '<div class="section-head"><h2>Where I\\'ve been</h2><span class="meta">' + past.length + ' stop' + (past.length===1?'':'s') + '</span></div>';
+    past.forEach(c => ps.innerHTML += buildLeg(c, true));
+  }
+
+  // Map
+  initMap(DATA.cities, current);
+}
+
+function buildLeg(c, isPast) {
+  const cls = isPast ? 'leg past' : 'leg';
+  return '<div class="' + cls + '">' +
+    '<div class="leg-head">' +
+      '<div class="leg-title">' + escapeHTML(c.name) +
+        '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' +
+        pill(c.status) +
+      '</div>' +
+      '<div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div>' +
+    '</div>' +
+    (c.accommodations.length ? '<div class="leg-accom">' + renderAccom(c.accommodations) + '</div>' : '') +
+  '</div>';
+}
+
+function initMap(cities, current) {
+  const valid = cities.filter(c => typeof c.lat === 'number' && typeof c.lng === 'number');
+  if (valid.length === 0) {
+    document.getElementById('map').innerHTML = '<div class="empty">No locations to map yet.</div>';
+    return;
+  }
+  const map = L.map('map').setView([valid[0].lat, valid[0].lng], 3);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap',
+    maxZoom: 18
+  }).addTo(map);
+  const bounds = [];
+  valid.forEach(c => {
+    const isCurrent = current && c.name === current.name;
+    const isPast = c.checkOut && c.checkOut <= TODAY && !isCurrent;
+    const color = isCurrent ? '#c72027' : (isPast ? '#8a8a8a' : '#0d8f3f');
+    const radius = isCurrent ? 11 : 7;
+    const marker = L.circleMarker([c.lat, c.lng], {
+      radius: radius, color: 'white', weight: 2, fillColor: color, fillOpacity: 0.9
+    }).addTo(map);
+    const datesBit = c.checkIn ? '<br><small>' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</small>' : '';
+    marker.bindPopup('<strong>' + escapeHTML(c.name) + '</strong><br>' + escapeHTML(c.country) + datesBit + (isCurrent ? '<br><strong style="color:#c72027">★ Currently here</strong>' : ''));
+    bounds.push([c.lat, c.lng]);
+  });
+  if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40] });
+}
+
+render();
+<\/script>
+</body>
+</html>`;
+}
+
+function exportData() {
+  const payload = {
+    meta: {
+      app: 'plan-ahead',
+      version: 'v1',
+      exportedAt: new Date().toISOString(),
+      cities: (state.cities || []).length,
+      ideas: (state.ideas || []).length
+    },
+    state: _deepClone(state)
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'plan-ahead-backup-' + todayISO() + '.json';
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
 }
@@ -3529,18 +4078,42 @@ function applyImportedJSON(text, source) {
     else setDataStatus(msg, 'error');
     return false;
   }
+
+  // Detect format: { meta, state } wrapper or bare state. Accept either.
+  const importedState = (parsed.state && typeof parsed.state === 'object') ? parsed.state : parsed;
+
+  // Sanity check — does this look like a plan-ahead export?
+  const expectedKeys = ['cities', 'ideas', 'profile', 'aiMode'];
+  const matchedKeys = expectedKeys.filter(k => k in importedState);
+  if (matchedKeys.length === 0) {
+    if (!confirm("This doesn't look like a Plan Ahead export (no recognized fields found). Import anyway?")) {
+      const msg = 'Import cancelled.';
+      if (source === 'paste') setPasteStatus(msg, 'error');
+      else setDataStatus(msg, 'error');
+      return false;
+    }
+  }
+
+  // Confirm destructive replacement and announce safety snapshot
+  if (!confirm('Replace all current data with imported JSON?\n\nA safety snapshot of your current data will be taken first — you can restore it from Settings → Snapshots if something goes wrong.')) {
+    const msg = 'Import cancelled.';
+    if (source === 'paste') setPasteStatus(msg, '');
+    else setDataStatus(msg, '');
+    return false;
+  }
+  takeManualSnapshot('Before import');
+
   try {
-    state = Object.assign(defaultState(), parsed);
+    state = Object.assign(defaultState(), importedState);
     openCityIds = new Set();
     const backfilled = backfillCoordinates();
     const promoted = backfillCityStatusFromAccommodations();
-    // Auto-score all cities (objective only) after import
     state.cities.forEach(c => autoScoreCity(c.id));
     saveState();
     renderAll();
     const cityCount = (state.cities || []).length;
     const ideaCount = (state.ideas || []).length;
-    let okMsg = `Imported ${cityCount} cit${cityCount===1?'y':'ies'}, ${ideaCount} idea${ideaCount===1?'':'s'}.`;
+    let okMsg = `✓ Imported ${cityCount} cit${cityCount===1?'y':'ies'}, ${ideaCount} idea${ideaCount===1?'':'s'}. Previous data kept as safety snapshot.`;
     if (backfilled > 0) okMsg += ` Auto-filled coordinates for ${backfilled}.`;
     if (source === 'paste') {
       setPasteStatus(okMsg + ' Closing…', 'ok');
@@ -3942,15 +4515,17 @@ function resetAll() {
   const el = document.getElementById('data-status');
   if (!el) return;
   if (el.dataset.armed === '1') {
+    // Take a safety snapshot before destruction so user can recover via Snapshots panel
+    takeManualSnapshot('Before reset');
     state = defaultState();
     saveState();
     renderAll();
-    setDataStatus('Reset complete.', 'ok');
+    setDataStatus('Reset complete. Previous data saved as "Before reset" snapshot.', 'ok');
     el.dataset.armed = '0';
     return;
   }
   el.dataset.armed = '1';
-  el.textContent = 'Click "Reset everything" again within 5 seconds to confirm.';
+  el.textContent = 'Click "Reset everything" again within 5 seconds to confirm. A safety snapshot will be taken first.';
   el.style.color = 'var(--accent)';
   setTimeout(() => {
     if (el.dataset.armed === '1') {
@@ -3977,25 +4552,53 @@ function renderSnapshots() {
   list.innerHTML = '';
   const snaps = loadSnapshots();
   if (snaps.length === 0) {
-    list.innerHTML = '<div class="muted">No snapshots yet. First one will be taken 10 minutes after your next change.</div>';
+    list.innerHTML = '<div class="muted">No snapshots yet. A daily auto-snapshot is taken on first page load each day; manual snapshots are taken before destructive operations and on-demand below.</div>';
     return;
   }
-  snaps.forEach(snap => {
-    const cities = (snap.data.cities || []).length;
-    const ideas = (snap.data.ideas || []).length;
+
+  // Sort: manual first (newest first), then auto (newest first)
+  snaps.sort((a, b) => {
+    if (a.isAuto !== b.isAuto) return a.isAuto ? 1 : -1;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+
+  snaps.forEach(s => {
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:var(--bg-softer);padding:8px 12px;border-radius:6px;font-size:13px';
-    row.innerHTML = `
-      <div>
-        <div style="font-weight:500">${new Date(snap.ts).toLocaleString('en-US', {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</div>
-        <div class="muted" style="font-size:11px">${cities} cit${cities===1?'y':'ies'}, ${ideas} idea${ideas===1?'':'s'}</div>
+    row.style.cssText = 'padding:8px 10px;background:var(--bg-soft);border:1px solid var(--border-light);border-radius:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap';
+
+    const left = document.createElement('div');
+    left.style.cssText = 'flex:1;min-width:200px';
+    const when = new Date(s.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const cityCount = (s.data && s.data.cities) ? s.data.cities.length : 0;
+    const ideaCount = (s.data && s.data.ideas) ? s.data.ideas.length : 0;
+    const badge = s.isAuto
+      ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;background:var(--bg-soft);color:var(--text-3);border:1px solid var(--border);padding:1px 5px;border-radius:3px;letter-spacing:0.05em;text-transform:uppercase">AUTO</span>'
+      : '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);padding:1px 5px;border-radius:3px;letter-spacing:0.05em;text-transform:uppercase">MANUAL</span>';
+    left.innerHTML = `
+      <div style="font-weight:500;font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        ${badge}
+        <span>${escapeHTML(s.name || '(unnamed)')}</span>
       </div>
+      <div style="font-size:11px;color:var(--text-3);font-family:'JetBrains Mono',monospace;margin-top:2px">${when} · ${cityCount} cit${cityCount===1?'y':'ies'} · ${ideaCount} idea${ideaCount===1?'':'s'}</div>
     `;
-    const btn = document.createElement('button');
-    btn.className = 'btn-secondary';
-    btn.textContent = 'Restore';
-    btn.onclick = () => restoreSnapshot(snap.ts);
-    row.appendChild(btn);
+    row.appendChild(left);
+
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px';
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'btn-secondary';
+    restoreBtn.textContent = 'Restore';
+    restoreBtn.onclick = () => restoreSnapshot(s.id);
+    actions.appendChild(restoreBtn);
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'icon-btn delete';
+    delBtn.textContent = '✕';
+    delBtn.title = 'Delete this snapshot';
+    delBtn.onclick = () => deleteSnapshot(s.id);
+    actions.appendChild(delBtn);
+
+    row.appendChild(actions);
     list.appendChild(row);
   });
 }
@@ -5892,6 +6495,10 @@ function renderAll() {
 }
 
 // ==================== INIT ====================
+
+// Daily auto-snapshot: takes one per calendar day on first load, capped at 7.
+// Critical: runs BEFORE any state mutations so it captures the pristine loaded state.
+ensureDailyAutoSnapshot();
 
 // Backfill: sync any cities whose accommodations are booked but status isn't
 const promotedCount = backfillCityStatusFromAccommodations();
