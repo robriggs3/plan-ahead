@@ -3825,15 +3825,15 @@ function buildFamilyShareHTML(payload) {
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <style>
 :root {
-  --bg: #f5f1e8; --bg-card: #ffffff; --bg-soft: #ebe7dd; --bg-softer: #f0ebdd;
-  --border: #d4cdb8; --border-light: #e5e0d0;
-  --text: #1a1a1a; --text-2: #4a4a4a; --text-3: #8a8a8a;
-  --accent: #c72027; --accent-soft: #fce8e9;
-  --green: #0d8f3f; --green-soft: #e3f3e9;
-  --blue: #2d5fb8; --blue-soft: #e3ebf5;
-  --amber: #c79620; --amber-soft: #f7f0db;
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 4px rgba(0,0,0,0.04);
-  --shadow-md: 0 4px 12px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+  --bg: #cccccc; --bg-card: #ffffff; --bg-soft: #bdbdbd; --bg-softer: #e8e8e8;
+  --border: #a8a8a8; --border-light: #d0d0d0;
+  --text: #242424; --text-2: #4a4a4a; --text-3: #666666;
+  --accent: #c72027; --accent-hover: #9c181d; --accent-soft: #f3d1d3;
+  --green: #2d7d34; --green-soft: #d4e8d5;
+  --blue: #2c5d8a; --blue-soft: #d3e0ee;
+  --amber: #8a6d00; --amber-soft: #ede1be;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.10);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 36px 20px 60px; -webkit-font-smoothing: antialiased; }
@@ -3939,9 +3939,9 @@ function colorFor(city, isCurrent) {
   if (isCurrent) return '#c72027';
   if (city.checkOut && city.checkOut <= TODAY) return '#8a8a8a';
   const s = city.status || 'tentative';
-  if (s === 'booked') return '#0d8f3f';
-  if (s === 'shortlisted') return '#2d5fb8';
-  return '#c79620';
+  if (s === 'booked') return '#2d7d34';
+  if (s === 'shortlisted') return '#2c5d8a';
+  return '#8a6d00';
 }
 
 function isCurrentAccommodation(a) {
@@ -3996,9 +3996,9 @@ function render() {
 
   document.getElementById('map-legend').innerHTML =
     '<span><span class="dot" style="background:#c72027"></span>Currently here</span>' +
-    '<span><span class="dot" style="background:#0d8f3f"></span>Booked</span>' +
-    '<span><span class="dot" style="background:#2d5fb8"></span>Shortlisted</span>' +
-    '<span><span class="dot" style="background:#c79620"></span>Tentative</span>' +
+    '<span><span class="dot" style="background:#2d7d34"></span>Booked</span>' +
+    '<span><span class="dot" style="background:#2c5d8a"></span>Shortlisted</span>' +
+    '<span><span class="dot" style="background:#8a6d00"></span>Tentative</span>' +
     '<span><span class="dot" style="background:#8a8a8a"></span>Past</span>';
 
   const fs = document.getElementById('future-section');
