@@ -5253,11 +5253,16 @@ function updateTransition(id, key, value) {
   if (!t) return;
   t[key] = value;
   saveState();
-  // Always refresh both Where-you-are and itinerary; transition changes can affect either.
-  // (Status change affects filter counts, dates can change which city is "current", etc.)
-  renderNow();
-  renderCounters();
-  renderCities();
+  // CRITICAL: text inputs use oninput which fires per keystroke. Re-rendering destroys
+  // the focused input and snaps the page. Only re-render on changes that actually need
+  // DOM updates — status (pill colors/grouping) and mode (icon).
+  // For other fields, the input already reflects the typed value; the mini-card summary
+  // refreshes on next natural render (page reload, status change, etc.).
+  if (key === 'status' || key === 'mode') {
+    renderNow();
+    renderCounters();
+    renderCities();
+  }
 }
 
 function deleteTransition(id) {
