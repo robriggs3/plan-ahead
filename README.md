@@ -6,6 +6,8 @@ A single HTML file for personal nomad travel planning. Tracks where you've been,
 
 Video Demo: https://www.loom.com/share/fc9e08bd47334c338b678cb0b9919170
 
+Note: Stores your data locally in your browser. Data only leaves your device when you explicitly: (a) publish the family share (sends stripped subset to GitHub), (b) use API-mode AI research (sends your profile + city context to Anthropic), or (c) view the map (loads tiles from OpenStreetMap).
+
 ## What it is
 
 One page for planning long-term travel: where you are now, where you're going, and what you're considering.
