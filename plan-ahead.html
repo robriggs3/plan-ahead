@@ -3883,6 +3883,18 @@ function buildFamilyShareForCurrentState() {
       }))
   })).filter(c => c.name);
 
+  // Diagnostic: warn loudly if filter drops cities — helps catch data issues
+  const totalInState = (state.cities || []).length;
+  if (cities.length < totalInState) {
+    const missing = (state.cities || []).filter(c => !c.name);
+    console.warn('[Plan Ahead] ' + (totalInState - cities.length) + ' cities filtered out of publish (no name field). Affected:', missing);
+  }
+  console.log('[Plan Ahead] Build for share:', {
+    citiesInState: totalInState,
+    citiesPublished: cities.length,
+    transitionsInState: (state.transitions || []).length
+  });
+
   // Transitions: strip cost, confirmation, notes — show only mode/carrier/number/dates/cities
   const transitions = (state.transitions || [])
     .filter(t => t.toCity || t.departureDate)  // skip blank
@@ -3953,6 +3965,18 @@ async function publishFamilyShare() {
   const file = state.githubFile || 'family.html';
 
   setStatus('🚀 Publishing to GitHub…', '');
+
+  // DIAGNOSTIC: log exactly what's about to go out
+  const cityCount = (state.cities || []).length;
+  const cityWithNameCount = (state.cities || []).filter(c => c.name).length;
+  const transCount = (state.transitions || []).length;
+  console.log('[Plan Ahead] Publishing:', {
+    citiesInState: cityCount,
+    citiesWithNames: cityWithNameCount,
+    transitions: transCount,
+    cityNames: (state.cities || []).map(c => c.name)
+  });
+  setStatus(`🚀 Publishing ${cityWithNameCount} cities + ${transCount} legs to GitHub…`, '');
 
   try {
     const html = buildFamilyShareForCurrentState();
@@ -5220,6 +5244,7 @@ function addTransition(cityId) {
     notes: ''
   });
   saveState();
+  renderNow();
   renderCities();
 }
 
@@ -5228,14 +5253,18 @@ function updateTransition(id, key, value) {
   if (!t) return;
   t[key] = value;
   saveState();
-  // For status change, re-render to refresh filter counts and section grouping
-  if (key === 'status') { renderCounters(); renderCities(); }
+  // Always refresh both Where-you-are and itinerary; transition changes can affect either.
+  // (Status change affects filter counts, dates can change which city is "current", etc.)
+  renderNow();
+  renderCounters();
+  renderCities();
 }
 
 function deleteTransition(id) {
   if (!confirm('Delete this travel leg? This cannot be undone (use snapshots to recover).')) return;
   state.transitions = (state.transitions || []).filter(t => t.id !== id);
   saveState();
+  renderNow();
   renderCities();
   renderCounters();
   toast('Travel leg deleted.', 'ok');
