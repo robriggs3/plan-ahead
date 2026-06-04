@@ -1223,6 +1223,7 @@
           <button class="btn-secondary danger" onclick="resetAll()">Reset everything</button>
         </div>
         <div id="data-status" class="muted" style="margin-top:10px;min-height:18px">Auto-saved continuously to your browser. Export regularly — browser data can be wiped.</div>
+        <div id="backup-freshness" style="margin-top:6px;font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:0.04em"></div>
         <div id="snapshots-block" style="display:none;margin-top:14px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px;flex-wrap:wrap">
             <label style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3)">Snapshot history</label>
@@ -1619,7 +1620,8 @@ function defaultState() {
     githubUser: '',
     githubRepo: '',
     githubFile: 'family.html',
-    lastPublishedAt: ''
+    lastPublishedAt: '',
+    lastExportedAt: ''  // ISO string of most recent successful JSON export. Drives "stale backup" nudge.
   };
 }
 
@@ -3964,19 +3966,28 @@ async function publishFamilyShare() {
   }
   const file = state.githubFile || 'family.html';
 
-  setStatus('🚀 Publishing to GitHub…', '');
-
-  // DIAGNOSTIC: log exactly what's about to go out
+  // Pre-flight count — shown in confirmation dialog so the user catches any "wait, that's the
+  // wrong number" surprises BEFORE shipping. This is exactly the diagnostic that would have
+  // caught the "publish shipped only 2 cities" incident earlier.
   const cityCount = (state.cities || []).length;
   const cityWithNameCount = (state.cities || []).filter(c => c.name).length;
   const transCount = (state.transitions || []).length;
+
+  const confirmMsg = `About to publish:\n\n  • ${cityWithNameCount} cit${cityWithNameCount===1?'y':'ies'}\n  • ${transCount} travel leg${transCount===1?'':'s'}\n\nTo: ${state.githubUser}/${state.githubRepo}/${file}\n\nThis will overwrite the current family share. Continue?`;
+  if (!confirm(confirmMsg)) {
+    setStatus('Publish cancelled.', '');
+    return;
+  }
+
+  setStatus(`🚀 Publishing ${cityWithNameCount} cities + ${transCount} legs to GitHub…`, '');
+
+  // DIAGNOSTIC: log exactly what's about to go out
   console.log('[Plan Ahead] Publishing:', {
     citiesInState: cityCount,
     citiesWithNames: cityWithNameCount,
     transitions: transCount,
     cityNames: (state.cities || []).map(c => c.name)
   });
-  setStatus(`🚀 Publishing ${cityWithNameCount} cities + ${transCount} legs to GitHub…`, '');
 
   try {
     const html = buildFamilyShareForCurrentState();
@@ -4315,13 +4326,16 @@ function buildTransit(t) {
   '</div>';
 }
 
-// Find transitions departing from a given city (matched by id when available, name fallback).
+// Find transitions departing from a given city.
+// Match strictly by ID when both sides have one (handles multiple cities with the same name,
+// e.g. past Atlanta vs. future Atlanta). Fall back to case-insensitive name only when ID is
+// missing on either side (older data or legacy imports).
 function transitsFromCity(city) {
   if (!DATA.transitions || !city) return [];
   const targetId = city.id || '';
   const targetName = (city.name || '').trim().toLowerCase();
   return DATA.transitions.filter(t => {
-    if (targetId && t.fromCityId && t.fromCityId === targetId) return true;
+    if (targetId && t.fromCityId) return t.fromCityId === targetId;
     return (t.fromCity || '').trim().toLowerCase() === targetName;
   });
 }
@@ -4385,6 +4399,10 @@ function exportData() {
   a.download = 'plan-ahead-backup-' + todayISO() + '.json';
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+  // Record the export timestamp so the staleness indicator updates immediately
+  state.lastExportedAt = new Date().toISOString();
+  saveState();
+  renderBackupFreshness();
 }
 
 function triggerFileImport() {
@@ -4413,6 +4431,29 @@ function setDataStatus(msg, kind) {
         el.style.color = '';
       }
     }, 6000);
+  }
+}
+
+// Backup-freshness indicator: nudges the user when it's been a while since the last
+// disk export. Browser localStorage CAN be wiped (clearing site data, browser reset,
+// disk full, profile corruption). Periodic JSON exports to disk are the real backup.
+function renderBackupFreshness() {
+  const el = document.getElementById('backup-freshness');
+  if (!el) return;
+  const last = state.lastExportedAt;
+  if (!last) {
+    el.innerHTML = '<span style="color:var(--amber)">⚠ No backup on record. Export your data to disk to protect against browser data loss.</span>';
+    return;
+  }
+  const lastDate = new Date(last);
+  const days = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
+  const human = lastDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  if (days >= 14) {
+    el.innerHTML = '<span style="color:var(--amber)">⚠ Last export: ' + human + ' (' + days + ' days ago). Consider exporting again.</span>';
+  } else if (days >= 7) {
+    el.innerHTML = '<span style="color:var(--text-2)">Last export: ' + human + ' (' + days + ' day' + (days===1?'':'s') + ' ago).</span>';
+  } else {
+    el.innerHTML = '<span style="color:var(--green)">✓ Last export: ' + human + (days === 0 ? ' (today)' : ' (' + days + ' day' + (days===1?'':'s') + ' ago)') + '</span>';
   }
 }
 
@@ -4964,15 +5005,27 @@ function renderSnapshots() {
     const when = new Date(s.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     const cityCount = (s.data && s.data.cities) ? s.data.cities.length : 0;
     const ideaCount = (s.data && s.data.ideas) ? s.data.ideas.length : 0;
+    const transCount = (s.data && s.data.transitions) ? s.data.transitions.length : 0;
+    // Accommodations are nested in cities — sum across all cities
+    const accomCount = (s.data && s.data.cities)
+      ? s.data.cities.reduce((sum, c) => sum + ((c.accommodations || []).length), 0)
+      : 0;
     const badge = s.isAuto
       ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;background:var(--bg-soft);color:var(--text-3);border:1px solid var(--border);padding:1px 5px;border-radius:3px;letter-spacing:0.05em;text-transform:uppercase">AUTO</span>'
       : '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);padding:1px 5px;border-radius:3px;letter-spacing:0.05em;text-transform:uppercase">MANUAL</span>';
+    // Build summary parts conditionally so zero-counts don't clutter
+    const parts = [
+      cityCount + ' cit' + (cityCount===1?'y':'ies'),
+      ideaCount + ' idea' + (ideaCount===1?'':'s')
+    ];
+    if (transCount > 0) parts.push(transCount + ' leg' + (transCount===1?'':'s'));
+    if (accomCount > 0) parts.push(accomCount + ' stay' + (accomCount===1?'':'s'));
     left.innerHTML = `
       <div style="font-weight:500;font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${badge}
         <span>${escapeHTML(s.name || '(unnamed)')}</span>
       </div>
-      <div style="font-size:11px;color:var(--text-3);font-family:'JetBrains Mono',monospace;margin-top:2px">${when} · ${cityCount} cit${cityCount===1?'y':'ies'} · ${ideaCount} idea${ideaCount===1?'':'s'}</div>
+      <div style="font-size:11px;color:var(--text-3);font-family:'JetBrains Mono',monospace;margin-top:2px">${when} · ${parts.join(' · ')}</div>
     `;
     row.appendChild(left);
 
@@ -5202,12 +5255,23 @@ function buildAdminTransitMini(t) {
   card.title = 'Click to edit this travel leg';
   card.onclick = () => {
     if (!t.cityId) return;
+    // Ensure the city is expanded BEFORE re-rendering so the body (with logistics) renders.
     openCityIds.add(t.cityId);
+    // Re-render both elevated "Where you are" and itinerary list so whichever contains
+    // this city now has its accordion open.
+    renderNow();
     renderCities();
+    // Scroll to the logistics module specifically, not just the city header
     setTimeout(() => {
-      const el = document.querySelector('[data-city-id="' + t.cityId + '"]');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 100);
+      const transitEl = document.querySelector('[data-city-transit-id="' + t.cityId + '"]');
+      if (transitEl) {
+        transitEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        // Fallback: scroll to the city card if transit section isn't rendered for some reason
+        const cityEl = document.querySelector('[data-city-id="' + t.cityId + '"]');
+        if (cityEl) cityEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 120);
   };
   return card;
 }
@@ -5279,6 +5343,7 @@ function deleteTransition(id) {
 function buildTransitions(city) {
   const wrap = document.createElement('div');
   wrap.className = 'transit-section';
+  wrap.dataset.cityTransitId = city.id;
   const cid = city.id;
   wrap.innerHTML = '<h3>Outbound travel <span style="font-weight:400;color:var(--text-3);font-size:12px;font-family:JetBrains Mono,monospace;letter-spacing:0.04em;margin-left:6px">flights, trains, ferries…</span><div style="display:inline-flex;gap:8px;margin-left:auto;align-items:center"><button class="btn-secondary" onclick="addTransition(\''+cid+'\')">+ Add leg</button></div></h3>';
 
@@ -7125,7 +7190,55 @@ function renderAll() {
   renderProfile();
   renderSettings();
   renderMap();
+  renderBackupFreshness();
 }
+
+// ==================== DRAG-AND-DROP IMPORT ====================
+// Drop a .json file anywhere on the page to trigger the import flow.
+// Reuses applyImportedJSON() so the same safety-snapshot, sanity-check, and
+// backfill behaviors apply as via the Browse / Paste paths.
+(function setupDragDropImport() {
+  let dragOverlay = null;
+  function ensureOverlay() {
+    if (dragOverlay) return dragOverlay;
+    dragOverlay = document.createElement('div');
+    dragOverlay.id = 'drag-import-overlay';
+    dragOverlay.style.cssText = 'position:fixed;inset:0;background:rgba(199,32,39,0.06);border:3px dashed var(--accent);z-index:9999;display:none;pointer-events:none;align-items:center;justify-content:center';
+    dragOverlay.innerHTML = '<div style="background:var(--bg-card);padding:24px 32px;border-radius:12px;box-shadow:var(--shadow-md);font-family:JetBrains Mono,monospace;font-size:14px;color:var(--text);border:1px solid var(--accent)">📥 Drop JSON file to import</div>';
+    document.body.appendChild(dragOverlay);
+    return dragOverlay;
+  }
+  let depth = 0; // nested dragenter/leave counter — single counter avoids flicker over child elements
+  window.addEventListener('dragenter', (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types || !e.dataTransfer.types.includes('Files')) return;
+    depth++;
+    ensureOverlay().style.display = 'flex';
+  });
+  window.addEventListener('dragleave', (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types || !e.dataTransfer.types.includes('Files')) return;
+    depth = Math.max(0, depth - 1);
+    if (depth === 0 && dragOverlay) dragOverlay.style.display = 'none';
+  });
+  window.addEventListener('dragover', (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types || !e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault(); // required for drop to fire
+  });
+  window.addEventListener('drop', (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+    e.preventDefault();
+    depth = 0;
+    if (dragOverlay) dragOverlay.style.display = 'none';
+    const file = e.dataTransfer.files[0];
+    if (!/\.json$/i.test(file.name)) {
+      toast('Only .json files are supported for import.', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => applyImportedJSON(reader.result, 'file');
+    reader.onerror = () => toast('Could not read dropped file.', 'error');
+    reader.readAsText(file);
+  });
+})();
 
 // ==================== INIT ====================
 
