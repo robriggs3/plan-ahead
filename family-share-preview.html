@@ -120,7 +120,7 @@ footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-const DATA = {"travelerName":"Rob","generatedAt":"2026-06-04T11:30:42.533Z","cities":[{"name":"Malaga","country":"Spain","state":"","status":"booked","checkIn":"2026-04-12","checkOut":"2026-06-05","lat":36.7,"lng":-4.4,"accommodations":[{"name":"Idealista","neighborhood":"Pedregalejo","link":"","status":"booked","checkIn":"2026-05-24","checkOut":"2026-06-05"}]}],"transitions":[{"mode":"flight","status":"booked","fromCity":"Malaga","toCity":"Atlanta","departureDate":"2026-06-05","departureTime":"17:05","arrivalDate":"2026-06-05","arrivalTime":"20:25","carrier":"KLM","number":"KL1234"}]};
+const DATA = {"travelerName":"Rob","generatedAt":"2026-06-04T11:47:16.801Z","cities":[{"id":"c1","name":"Malaga","country":"Spain","state":"","status":"booked","checkIn":"2026-04-12","checkOut":"2026-06-05","lat":36.7,"lng":-4.4,"accommodations":[{"name":"Idealista","neighborhood":"Pedregalejo","link":"","status":"booked","checkIn":"2026-05-24","checkOut":"2026-06-05"}]},{"id":"c2","name":"Atlanta","country":"United States","state":"GA","status":"booked","checkIn":"2026-06-05","checkOut":"2026-06-06","lat":33.7,"lng":-84.4,"accommodations":[]}],"transitions":[{"fromCityId":"c1","mode":"flight","status":"booked","fromCity":"Malaga","toCity":"Atlanta","departureDate":"2026-06-05","departureTime":"17:05","arrivalDate":"2026-06-05","arrivalTime":"20:25","carrier":"KLM","number":"KL1234"}]};
 const TODAY = new Date().toISOString().slice(0,10);
 const TRAVELER = (DATA.travelerName && DATA.travelerName.trim()) || 'They';
 
@@ -189,7 +189,7 @@ function render() {
   const cs = document.getElementById('current-section');
   if (current) {
     const daysLeft = Math.round((new Date(current.checkOut + 'T00:00:00') - new Date(TODAY + 'T00:00:00')) / 86400000);
-    const outbound = transitsFromCity(current.name);
+    const outbound = transitsFromCity(current);
     const outboundHTML = outbound.length > 0
       ? '<div class="accom-block"><div class="accom-label">Next leg out</div>' + outbound.map(buildTransit).join('') + '</div>'
       : '';
@@ -212,7 +212,7 @@ function render() {
   } else {
     future.forEach(c => {
       fs.innerHTML += buildLeg(c, false);
-      transitsFromCity(c.name).forEach(t => fs.innerHTML += buildTransit(t));
+      transitsFromCity(c).forEach(t => fs.innerHTML += buildTransit(t));
     });
   }
 
@@ -221,7 +221,7 @@ function render() {
     ps.innerHTML = '<div class="section-head"><h2>Where ' + escapeHTML(TRAVELER) + ' has been</h2><span class="meta">' + past.length + ' stop' + (past.length===1?'':'s') + '</span></div>';
     past.forEach(c => {
       ps.innerHTML += buildLeg(c, true);
-      transitsFromCity(c.name).forEach(t => ps.innerHTML += buildTransit(t));
+      transitsFromCity(c).forEach(t => ps.innerHTML += buildTransit(t));
     });
   }
 
@@ -261,10 +261,15 @@ function buildTransit(t) {
   '</div>';
 }
 
-// Find transitions departing from a given city (matched by name since IDs not exposed to family view)
-function transitsFromCity(cityName) {
-  if (!DATA.transitions) return [];
-  return DATA.transitions.filter(t => t.fromCity === cityName);
+// Find transitions departing from a given city (matched by id when available, name fallback).
+function transitsFromCity(city) {
+  if (!DATA.transitions || !city) return [];
+  const targetId = city.id || '';
+  const targetName = (city.name || '').trim().toLowerCase();
+  return DATA.transitions.filter(t => {
+    if (targetId && t.fromCityId && t.fromCityId === targetId) return true;
+    return (t.fromCity || '').trim().toLowerCase() === targetName;
+  });
 }
 
 function initMap(cities, current) {

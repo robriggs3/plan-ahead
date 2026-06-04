@@ -338,6 +338,26 @@
     font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500;
     margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
   }
+  /* Uncovered nights warning */
+  .uncovered-flag {
+    color: var(--amber); font-weight: 500; margin-left: 4px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  }
+  .uncovered-panel {
+    background: var(--amber-soft); border: 1px solid var(--amber);
+    border-left: 4px solid var(--amber); border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 10px;
+  }
+  .uncovered-head {
+    color: var(--amber); font-size: 13px; line-height: 1.4;
+  }
+  .uncovered-dates {
+    margin-top: 4px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--text); letter-spacing: 0.02em;
+  }
+  .uncovered-note {
+    margin-top: 6px; font-size: 11px; color: var(--text-2); line-height: 1.5;
+  }
   /* ---- Transitions (travel legs) ---- */
   .transit-section { margin-top: 20px; padding-left: 18px; border-left: 2px dashed var(--border); }
   /* ---- Inline transit summary card (between cities in itinerary list) ---- */
@@ -1887,6 +1907,50 @@ function cityNights(city) {
   return nightsBetween(city.checkIn, city.checkOut);
 }
 
+// Detect "homeless nights" — nights within a city's stay not covered by a booked
+// accommodation OR an overnight booked transit. Returns array of ISO date strings.
+// Only considers BOOKED items (shortlisted/tentative don't count as confirmed shelter).
+function uncoveredNights(city) {
+  if (!city.checkIn || !city.checkOut) return [];
+  const covered = new Set();
+
+  // Mark dates covered by booked accommodations
+  (city.accommodations || []).forEach(a => {
+    if (a.status !== 'booked' || !a.checkIn || !a.checkOut) return;
+    let d = new Date(a.checkIn + 'T12:00:00');
+    const end = new Date(a.checkOut + 'T12:00:00');
+    while (d < end) {
+      covered.add(d.toISOString().slice(0, 10));
+      d.setDate(d.getDate() + 1);
+    }
+  });
+
+  // Mark dates covered by booked overnight transit from this city
+  // (a redeye flight, sleeper train, cruise overnight counts as "covered")
+  (state.transitions || []).forEach(t => {
+    if (t.cityId !== city.id || t.status !== 'booked') return;
+    if (!t.departureDate || !t.arrivalDate) return;
+    if (t.departureDate === t.arrivalDate) return; // same-day, doesn't cover a night
+    let d = new Date(t.departureDate + 'T12:00:00');
+    const end = new Date(t.arrivalDate + 'T12:00:00');
+    while (d < end) {
+      covered.add(d.toISOString().slice(0, 10));
+      d.setDate(d.getDate() + 1);
+    }
+  });
+
+  // Walk every night in the city stay and flag uncovered ones
+  const uncovered = [];
+  let d = new Date(city.checkIn + 'T12:00:00');
+  const cityEnd = new Date(city.checkOut + 'T12:00:00');
+  while (d < cityEnd) {
+    const iso = d.toISOString().slice(0, 10);
+    if (!covered.has(iso)) uncovered.push(iso);
+    d.setDate(d.getDate() + 1);
+  }
+  return uncovered;
+}
+
 // Per-country totals
 function countryDayMap(range) {
   const map = {};
@@ -2702,7 +2766,10 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
         ${statusPill}
         ${scoreBadge}
       </div>
-      <div class="city-dates">${fmtDate(city.checkIn)} → ${fmtDate(city.checkOut)} · ${nights} night${nights===1?'':'s'}</div>
+      <div class="city-dates">${fmtDate(city.checkIn)} → ${fmtDate(city.checkOut)} · ${nights} night${nights===1?'':'s'}${(() => {
+        const un = uncoveredNights(city);
+        return un.length ? ' · <span class="uncovered-flag" title="Nights without booked accommodation or overnight transit">⚠ ' + un.length + ' uncovered</span>' : '';
+      })()}</div>
     </div>
     <div class="city-stats">
       <div class="stat"><span class="num">${nights}</span> nights</div>
@@ -2896,6 +2963,34 @@ function buildAccommodations(city) {
   wrap.className = 'accom-section';
   const capturedId = city.id;
   wrap.innerHTML = '<h3>Accommodations <div style="display:inline-flex;gap:8px;margin-left:auto;align-items:center"><button class="btn-secondary" onclick="openBatchScoreModalForAccoms(\''+capturedId+'\')" title="Score all properties in one batched API call">⚡ Score all</button><button class="btn-secondary" onclick="addAccommodation(\''+capturedId+'\')">+ Add</button></div></h3>';
+
+  // Uncovered-nights panel: lists specific dates with no booked accommodation or overnight transit.
+  // Helps avoid "homeless night" scenarios from past gaps.
+  const uncovered = uncoveredNights(city);
+  if (uncovered.length > 0) {
+    const panel = document.createElement('div');
+    panel.className = 'uncovered-panel';
+    // Group consecutive dates into ranges for cleaner display
+    const ranges = [];
+    let curStart = uncovered[0], curEnd = uncovered[0];
+    for (let i = 1; i < uncovered.length; i++) {
+      const prev = new Date(curEnd + 'T12:00:00');
+      const next = new Date(uncovered[i] + 'T12:00:00');
+      if ((next - prev) / 86400000 === 1) {
+        curEnd = uncovered[i];
+      } else {
+        ranges.push([curStart, curEnd]);
+        curStart = curEnd = uncovered[i];
+      }
+    }
+    ranges.push([curStart, curEnd]);
+    const rangeText = ranges.map(([s, e]) => {
+      if (s === e) return fmtDate(s);
+      return fmtDate(s) + ' → ' + fmtDate(e);
+    }).join(', ');
+    panel.innerHTML = '<div class="uncovered-head">⚠ <strong>' + uncovered.length + ' night' + (uncovered.length===1?'':'s') + ' without a booked bed</strong></div><div class="uncovered-dates">' + rangeText + '</div><div class="uncovered-note">Add an accommodation that covers these dates, or mark an existing one as Booked. Overnight transit also counts as coverage.</div>';
+    wrap.appendChild(panel);
+  }
 
   const list = document.createElement('div');
   list.className = 'accom-list';
@@ -3766,6 +3861,7 @@ function toggleGithubSetup() {
 // both download and publish paths use the same logic).
 function buildFamilyShareForCurrentState() {
   const cities = (state.cities || []).map(c => ({
+    id: c.id || '',
     name: c.name || '',
     country: c.country || '',
     state: c.state || '',
@@ -3791,9 +3887,10 @@ function buildFamilyShareForCurrentState() {
   const transitions = (state.transitions || [])
     .filter(t => t.toCity || t.departureDate)  // skip blank
     .map(t => {
-      // Resolve source city name from cityId
+      // Resolve source city name from cityId — preserve both id (for stable matching) and name (for display)
       const srcCity = (state.cities || []).find(c => c.id === t.cityId);
       return {
+        fromCityId: t.cityId || '',
         mode: t.mode || 'other',
         status: t.status || 'tentative',
         fromCity: srcCity ? srcCity.name : '',
@@ -4122,7 +4219,7 @@ function render() {
   const cs = document.getElementById('current-section');
   if (current) {
     const daysLeft = Math.round((new Date(current.checkOut + 'T00:00:00') - new Date(TODAY + 'T00:00:00')) / 86400000);
-    const outbound = transitsFromCity(current.name);
+    const outbound = transitsFromCity(current);
     const outboundHTML = outbound.length > 0
       ? '<div class="accom-block"><div class="accom-label">Next leg out</div>' + outbound.map(buildTransit).join('') + '</div>'
       : '';
@@ -4145,7 +4242,7 @@ function render() {
   } else {
     future.forEach(c => {
       fs.innerHTML += buildLeg(c, false);
-      transitsFromCity(c.name).forEach(t => fs.innerHTML += buildTransit(t));
+      transitsFromCity(c).forEach(t => fs.innerHTML += buildTransit(t));
     });
   }
 
@@ -4154,7 +4251,7 @@ function render() {
     ps.innerHTML = '<div class="section-head"><h2>Where ' + escapeHTML(TRAVELER) + ' has been</h2><span class="meta">' + past.length + ' stop' + (past.length===1?'':'s') + '</span></div>';
     past.forEach(c => {
       ps.innerHTML += buildLeg(c, true);
-      transitsFromCity(c.name).forEach(t => ps.innerHTML += buildTransit(t));
+      transitsFromCity(c).forEach(t => ps.innerHTML += buildTransit(t));
     });
   }
 
@@ -4194,10 +4291,15 @@ function buildTransit(t) {
   '</div>';
 }
 
-// Find transitions departing from a given city (matched by name since IDs not exposed to family view)
-function transitsFromCity(cityName) {
-  if (!DATA.transitions) return [];
-  return DATA.transitions.filter(t => t.fromCity === cityName);
+// Find transitions departing from a given city (matched by id when available, name fallback).
+function transitsFromCity(city) {
+  if (!DATA.transitions || !city) return [];
+  const targetId = city.id || '';
+  const targetName = (city.name || '').trim().toLowerCase();
+  return DATA.transitions.filter(t => {
+    if (targetId && t.fromCityId && t.fromCityId === targetId) return true;
+    return (t.fromCity || '').trim().toLowerCase() === targetName;
+  });
 }
 
 function initMap(cities, current) {
