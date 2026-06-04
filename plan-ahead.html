@@ -419,6 +419,11 @@
     color: var(--text-2);
     padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--border-light);
   }
+  .transit-summary:hover { color: var(--text); }
+  /* When collapsed (no .open class), the summary is the entire content — drop the divider line */
+  .transit-item:not(.open) .transit-summary {
+    padding-bottom: 0; margin-bottom: 0; border-bottom: none;
+  }
   .transit-icon { font-size: 18px; line-height: 1; }
   .transit-summary-text { font-weight: 500; color: var(--text); letter-spacing: 0.02em; }
   .transit-summary-date { color: var(--text-3); margin-left: auto; }
@@ -1909,31 +1914,33 @@ function cityNights(city) {
   return nightsBetween(city.checkIn, city.checkOut);
 }
 
-// Detect "homeless nights" — nights within a city's stay not covered by a booked
-// accommodation OR an overnight booked transit. Returns array of ISO date strings.
-// Only considers BOOKED items (shortlisted/tentative don't count as confirmed shelter).
+// Detect "homeless nights" — nights within a city's stay not covered by ANY booked
+// accommodation OR overnight booked transit, regardless of which city those belong to.
+// Returns array of ISO date strings.
+// Why global: city date ranges can overlap (e.g. you're "in" Essaouira until Aug 1 but
+// already checked into Mindelo on Jul 31). What matters for homelessness is whether you
+// have a bed somewhere that night, not whether that bed is filed under the right city.
+// Only considers BOOKED items — shortlisted/tentative don't count as confirmed shelter.
 function uncoveredNights(city) {
   if (!city.checkIn || !city.checkOut) return [];
   const covered = new Set();
 
-  // Mark dates covered by booked accommodations
-  (city.accommodations || []).forEach(a => {
-    if (a.status !== 'booked' || !a.checkIn || !a.checkOut) return;
-    let d = new Date(a.checkIn + 'T12:00:00');
-    const end = new Date(a.checkOut + 'T12:00:00');
-    while (d < end) {
-      covered.add(d.toISOString().slice(0, 10));
-      d.setDate(d.getDate() + 1);
-    }
+  // Mark dates covered by booked accommodations ACROSS ALL CITIES
+  // (not just this city — see comment above for rationale)
+  (state.cities || []).forEach(c => {
+    (c.accommodations || []).forEach(a => {
+      if (a.status !== 'booked' || !a.checkIn || !a.checkOut) return;
+      let d = new Date(a.checkIn + 'T12:00:00');
+      const end = new Date(a.checkOut + 'T12:00:00');
+      while (d < end) {
+        covered.add(d.toISOString().slice(0, 10));
+        d.setDate(d.getDate() + 1);
+      }
+    });
   });
 
-  // Mark dates covered by ANY booked overnight transit — not just outgoing from this city.
-  // An overnight redeye, sleeper train, or multi-night cruise gives the traveler a place
-  // to be even though they're not at any accommodation. Whether the transit is "outgoing"
-  // from the current city, "incoming" to it, or part of an entirely separate leg, the
-  // calendar night between departureDate and arrivalDate is covered uniformly.
-  // (Example: Atlanta → CDG redeye attached to Atlanta's cityId still covers its overnight
-  // calendar night for any city whose date range includes that night.)
+  // Mark dates covered by ANY booked overnight transit — outgoing, incoming, or
+  // unrelated. The calendar night between departureDate and arrivalDate is global coverage.
   (state.transitions || []).forEach(t => {
     if (t.status !== 'booked') return;
     if (!t.departureDate || !t.arrivalDate) return;
@@ -2432,6 +2439,7 @@ function renderCounters() {
 
 let openCityIds = new Set();
 let openAccomIds = new Set();
+let openTransitionIds = new Set();
 
 function renderCities() {
   const container = document.getElementById('city-list');
@@ -2786,7 +2794,9 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
     <div class="city-chev">▶</div>
   `;
   header.onclick = (e) => {
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA') return;
+    // Use closest() instead of tag check on direct target — catches clicks on nested
+    // form elements, contenteditable areas, or interactive children
+    if (e.target.closest('input, select, button, textarea, a, [contenteditable=true]')) return;
     if (openCityIds.has(capturedId)) openCityIds.delete(capturedId);
     else openCityIds.add(capturedId);
     // renderAll instead of just renderCities — the elevated card lives in the "Where you are"
@@ -2969,10 +2979,9 @@ function buildAccommodations(city) {
   const wrap = document.createElement('div');
   wrap.className = 'accom-section';
   const capturedId = city.id;
-  wrap.innerHTML = '<h3>Accommodations <div style="display:inline-flex;gap:8px;margin-left:auto;align-items:center"><button class="btn-secondary" onclick="openBatchScoreModalForAccoms(\''+capturedId+'\')" title="Score all properties in one batched API call">⚡ Score all</button><button class="btn-secondary" onclick="addAccommodation(\''+capturedId+'\')">+ Add</button></div></h3>';
 
-  // Uncovered-nights panel: lists specific dates with no booked accommodation or overnight transit.
-  // Helps avoid "homeless night" scenarios from past gaps.
+  // Uncovered-nights panel: rendered FIRST (above the section header + Add button) so the
+  // warning is visible immediately on city expand, not tucked beneath the action buttons.
   const uncovered = uncoveredNights(city);
   if (uncovered.length > 0) {
     const panel = document.createElement('div');
@@ -2995,14 +3004,28 @@ function buildAccommodations(city) {
       if (s === e) return fmtDate(s);
       return fmtDate(s) + ' → ' + fmtDate(e);
     }).join(', ');
-    panel.innerHTML = '<div class="uncovered-head">⚠ <strong>' + uncovered.length + ' night' + (uncovered.length===1?'':'s') + ' without a booked bed</strong></div><div class="uncovered-dates">' + rangeText + '</div><div class="uncovered-note">Add an accommodation that covers these dates, or mark an existing one as Booked. Overnight transit also counts as coverage.</div>';
+    panel.innerHTML = '<div class="uncovered-head">⚠ <strong>' + uncovered.length + ' night' + (uncovered.length===1?'':'s') + ' without a booked bed</strong></div><div class="uncovered-dates">' + rangeText + '</div><div class="uncovered-note">Coverage is checked globally — an accommodation in any city or any overnight transit counts. Add a stay or extend an existing booking to resolve.</div>';
     wrap.appendChild(panel);
   }
 
+  // Section header + actions (AFTER warning panel)
+  wrap.insertAdjacentHTML('beforeend', '<h3>Accommodations <div style="display:inline-flex;gap:8px;margin-left:auto;align-items:center"><button class="btn-secondary" onclick="openBatchScoreModalForAccoms(\''+capturedId+'\')" title="Score all properties in one batched API call">⚡ Score all</button><button class="btn-secondary" onclick="addAccommodation(\''+capturedId+'\')">+ Add</button></div></h3>');
+
   const list = document.createElement('div');
   list.className = 'accom-list';
-  (city.accommodations || []).forEach(acc => list.appendChild(buildAccommodation(city, acc)));
-  if (!city.accommodations || city.accommodations.length === 0) {
+  // Sort accommodations by checkIn date (earliest first). Stable secondary sort by name so
+  // entries without dates don't jump around. Sort a shallow copy — never mutate state.cities
+  // order — snapshots / restore depend on stable serialization.
+  const sortedAccoms = (city.accommodations || []).slice().sort((a, b) => {
+    const ai = a.checkIn || '';
+    const bi = b.checkIn || '';
+    if (ai && bi) return ai.localeCompare(bi);
+    if (ai && !bi) return -1;  // dated entries before undated
+    if (!ai && bi) return 1;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+  sortedAccoms.forEach(acc => list.appendChild(buildAccommodation(city, acc)));
+  if (sortedAccoms.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'sub-empty';
     empty.textContent = 'No accommodations yet. Add one to compare options.';
@@ -3025,16 +3048,50 @@ function buildAccommodation(city, acc) {
   const nameWrap = document.createElement('div');
   const name = document.createElement('div');
   name.className = 'accom-name';
-  name.contentEditable = 'true';
+  // Name is NOT contentEditable by default — clicking it toggles the accordion (matches
+  // intuitive accordion-header behavior). Double-click to enter rename mode.
+  name.contentEditable = 'false';
   name.textContent = acc.name || '';
   name.dataset.placeholder = 'Property name';
+  name.style.cursor = 'pointer';
   if (!acc.name) name.style.color = 'var(--text-3)';
-  name.addEventListener('focus', () => name.style.color = '');
+  // Double-click → enter edit mode (focus + select-all so user can immediately type over)
+  name.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    name.contentEditable = 'true';
+    name.style.color = '';
+    name.focus();
+    // Select-all so a single keystroke replaces the old name
+    const range = document.createRange();
+    range.selectNodeContents(name);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  });
   name.addEventListener('blur', () => {
+    name.contentEditable = 'false';
     const v = name.textContent.trim();
+    if (!v) {
+      name.textContent = '';
+      name.style.color = 'var(--text-3)';
+    }
     updateAccom(cityId, accId, 'name', v);
   });
+  // Pressing Enter while editing → save and exit edit mode
+  name.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      name.blur();
+    }
+  });
+  // Small "rename" hint that appears on row hover, so the double-click affordance is discoverable
+  const renameHint = document.createElement('span');
+  renameHint.textContent = '✎ rename';
+  renameHint.style.cssText = 'font-family:JetBrains Mono,monospace;font-size:9px;color:var(--text-3);opacity:0;transition:opacity 0.2s;margin-left:8px;letter-spacing:0.05em;pointer-events:none';
+  nameWrap.style.display = 'flex';
+  nameWrap.style.alignItems = 'baseline';
   nameWrap.appendChild(name);
+  nameWrap.appendChild(renameHint);
 
   const linkRow = document.createElement('div');
   linkRow.style.fontSize = '12px';
@@ -3137,15 +3194,20 @@ function buildAccommodation(city, acc) {
   };
   row1.appendChild(chev);
 
-  // Make clicking the row1 background (but not its form/button children) also toggle
+  // Make clicking the row1 background (including name when not in edit mode) also toggle
   row1.style.cursor = 'pointer';
   row1.addEventListener('click', (e) => {
-    // Only toggle if click is on row1 itself or a non-interactive child
-    const tag = (e.target.tagName || '').toLowerCase();
-    if (['input','select','textarea','button','a'].includes(tag)) return;
-    if (e.target.isContentEditable) return;
+    // Don't toggle when clicking actual form controls or links
+    if (e.target.closest('input, select, textarea, button, a')) return;
+    // Don't toggle if user is actively editing the name (it's been made contentEditable
+    // via double-click); let them place the cursor freely
+    if (e.target.isContentEditable && document.activeElement === e.target) return;
     chev.click();
   });
+  // Reveal the "✎ rename" hint when hovering the row, so the double-click affordance
+  // on the name is discoverable
+  row1.addEventListener('mouseenter', () => { renameHint.style.opacity = '0.6'; });
+  row1.addEventListener('mouseleave', () => { renameHint.style.opacity = '0'; });
 
   item.appendChild(row1);
 
@@ -5260,19 +5322,17 @@ function buildAdminTransitMini(t) {
   card.title = 'Click to edit this travel leg';
   card.onclick = () => {
     if (!t.cityId) return;
-    // Ensure the city is expanded BEFORE re-rendering so the body (with logistics) renders.
+    // Open both the parent city accordion AND this specific transit accordion so the
+    // editor body is visible without needing a second click.
     openCityIds.add(t.cityId);
-    // Re-render both elevated "Where you are" and itinerary list so whichever contains
-    // this city now has its accordion open.
+    openTransitionIds.add(t.id);
     renderNow();
     renderCities();
-    // Scroll to the logistics module specifically, not just the city header
     setTimeout(() => {
       const transitEl = document.querySelector('[data-city-transit-id="' + t.cityId + '"]');
       if (transitEl) {
         transitEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else {
-        // Fallback: scroll to the city card if transit section isn't rendered for some reason
         const cityEl = document.querySelector('[data-city-id="' + t.cityId + '"]');
         if (cityEl) cityEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
@@ -5294,7 +5354,7 @@ function addTransition(cityId) {
   const sorted = sortedCities();
   const idx = sorted.findIndex(x => x.id === cityId);
   const nextCity = (idx >= 0 && idx < sorted.length - 1) ? sorted[idx + 1] : null;
-  state.transitions.push({
+  const newTransition = {
     id: newId(),
     cityId: cityId,
     toCity: nextCity ? nextCity.name : '',
@@ -5311,7 +5371,10 @@ function addTransition(cityId) {
     currency: 'USD',
     link: '',
     notes: ''
-  });
+  };
+  state.transitions.push(newTransition);
+  // Auto-open the new leg so the user can fill in details immediately, no extra click needed
+  openTransitionIds.add(newTransition.id);
   saveState();
   renderNow();
   renderCities();
@@ -5370,21 +5433,31 @@ function buildTransitions(city) {
 function buildTransitionRow(city, t) {
   const item = document.createElement('div');
   const isPast = isPastTransition(t);
-  item.className = 'transit-item status-' + (t.status || 'tentative') + (isPast ? ' past' : '');
+  const isOpen = openTransitionIds.has(t.id);
+  item.className = 'transit-item status-' + (t.status || 'tentative') + (isPast ? ' past' : '') + (isOpen ? ' open' : '');
   const tid = t.id;
   const icon = transitionIcon(t.mode);
 
-  // Compact summary line (always visible)
+  // Compact summary line — always visible, clickable to toggle the editor body below
   const summary = document.createElement('div');
   summary.className = 'transit-summary';
+  summary.style.cursor = 'pointer';
   const summaryLine = (t.carrier || t.number)
     ? [t.carrier, t.number].filter(Boolean).join(' ')
     : transitionLabel(t.mode);
   const dateBit = t.departureDate
     ? fmtDate(t.departureDate) + (t.departureTime ? ' · ' + t.departureTime : '')
     : '<span class="muted">— no date —</span>';
-  summary.innerHTML = '<span class="transit-icon">' + icon + '</span><span class="transit-summary-text">' + escapeHTML(summaryLine) + ' → ' + escapeHTML(t.toCity || '?') + '</span><span class="transit-summary-date">' + dateBit + '</span>';
-  item.appendChild(summary);
+  summary.innerHTML =
+    '<span class="transit-icon">' + icon + '</span>' +
+    '<span class="transit-summary-text">' + escapeHTML(summaryLine) + ' → ' + escapeHTML(t.toCity || '?') + '</span>' +
+    '<span class="transit-summary-date">' + dateBit + '</span>' +
+    '<span class="transit-chev" style="margin-left:8px;color:var(--text-3);font-size:11px;transition:transform 0.2s;transform:rotate(' + (isOpen ? '0' : '-90') + 'deg)">▾</span>';
+
+  // Body wraps the editor + notes + delete — toggled by clicking the summary
+  const body = document.createElement('div');
+  body.className = 'transit-body';
+  body.style.display = isOpen ? '' : 'none';
 
   // Editable fields grid
   const grid = document.createElement('div');
@@ -5433,20 +5506,39 @@ function buildTransitionRow(city, t) {
       <input type="url" value="${escapeHTML(t.link||'')}" placeholder="https://…" oninput="updateTransition('${tid}','link',this.value)">
     </label>
   `;
-  item.appendChild(grid);
+  body.appendChild(grid);
 
   // Notes (full width)
   const notes = document.createElement('label');
   notes.className = 'transit-notes';
   notes.innerHTML = `Notes (admin only — not shown in family share)<textarea rows="2" placeholder="Layover info, terminal, etc." oninput="updateTransition('${tid}','notes',this.value)">${escapeHTML(t.notes||'')}</textarea>`;
-  item.appendChild(notes);
+  body.appendChild(notes);
 
   // Delete button
   const del = document.createElement('div');
   del.className = 'transit-actions';
   del.innerHTML = '<button class="btn-secondary danger" onclick="deleteTransition(\''+tid+'\')">Delete leg</button>';
-  item.appendChild(del);
+  body.appendChild(del);
 
+  // Toggle handler on the summary header — same pattern as city / accom accordions:
+  // click anywhere except actual form controls toggles the body open/closed.
+  summary.addEventListener('click', (e) => {
+    if (e.target.closest('input, select, textarea, button, a, [contenteditable=true]')) return;
+    if (openTransitionIds.has(tid)) openTransitionIds.delete(tid);
+    else openTransitionIds.add(tid);
+    item.classList.toggle('open');
+    const chev = summary.querySelector('.transit-chev');
+    if (openTransitionIds.has(tid)) {
+      body.style.display = '';
+      if (chev) chev.style.transform = 'rotate(0deg)';
+    } else {
+      body.style.display = 'none';
+      if (chev) chev.style.transform = 'rotate(-90deg)';
+    }
+  });
+
+  item.appendChild(summary);
+  item.appendChild(body);
   return item;
 }
 
