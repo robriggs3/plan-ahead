@@ -340,6 +340,44 @@
   }
   /* ---- Transitions (travel legs) ---- */
   .transit-section { margin-top: 20px; padding-left: 18px; border-left: 2px dashed var(--border); }
+  /* ---- Inline transit summary card (between cities in itinerary list) ---- */
+  .transit-mini {
+    display: flex; align-items: center; gap: 12px;
+    margin: 4px 0 4px 24px;
+    padding: 10px 14px;
+    background: var(--bg-soft);
+    border: 1px solid var(--border-light);
+    border-left: 4px solid var(--text-3);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px;
+    color: var(--text-2); letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: box-shadow 0.15s, transform 0.15s;
+  }
+  .transit-mini:hover { box-shadow: var(--shadow-sm); transform: translateX(2px); }
+  .transit-mini.status-booked { border-left-color: var(--green); }
+  .transit-mini.status-shortlisted { border-left-color: var(--blue); }
+  .transit-mini.status-tentative { border-left-color: var(--amber); }
+  .transit-mini.past { opacity: 0.6; }
+  .transit-mini-icon { font-size: 17px; line-height: 1; flex: 0 0 auto; }
+  .transit-mini-main { flex: 1; min-width: 0; }
+  .transit-mini-line1 {
+    color: var(--text); font-weight: 500; font-size: 12px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .transit-mini-line2 { color: var(--text-3); margin-top: 2px; }
+  .transit-mini-time { color: var(--text-2); white-space: nowrap; font-size: 11px; }
+  .transit-mini-pill {
+    font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 1px 6px; border-radius: 3px; font-weight: 500;
+  }
+  .transit-mini-pill.booked { background: var(--green-soft); color: var(--green); }
+  .transit-mini-pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
+  .transit-mini-pill.tentative { background: var(--amber-soft); color: var(--amber); }
+  @media (max-width: 720px) {
+    .transit-mini { margin-left: 12px; flex-wrap: wrap; }
+    .transit-mini-time { width: 100%; margin-top: 4px; }
+  }
   .transit-section h3 {
     font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; font-style: italic;
     margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
@@ -2397,9 +2435,13 @@ function renderCities() {
       header.textContent = label + ' · ' + cities.length;
       container.appendChild(header);
     }
-    cities.forEach(city => container.appendChild(
-      renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), false)
-    ));
+    cities.forEach(city => {
+      container.appendChild(
+        renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), false)
+      );
+      // After each city, render its outbound travel legs as compact summary cards
+      transitionsForCity(city.id).forEach(t => container.appendChild(buildAdminTransitMini(t)));
+    });
   };
 
   if (activeFilter === 'all') {
@@ -2411,9 +2453,12 @@ function renderCities() {
   else if (activeFilter === 'tentative') renderGroup(byStatus.tentative);
   else if (activeFilter === 'past') {
     // Render past as a flat list when filter active
-    past.forEach(city => container.appendChild(
-      renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), true)
-    ));
+    past.forEach(city => {
+      container.appendChild(
+        renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), true)
+      );
+      transitionsForCity(city.id).forEach(t => container.appendChild(buildAdminTransitMini(t)));
+    });
   }
   // Past travel now renders in its own dedicated section below Ideas (renderPastTravel)
 }
@@ -2441,9 +2486,10 @@ function renderPastTravel() {
   const alertCityIds = new Set(issues.filter(i => i.severity === 'alert').flatMap(i => i.cityIds));
 
   list.innerHTML = '';
-  past.forEach(city => list.appendChild(
-    renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), true)
-  ));
+  past.forEach(city => {
+    list.appendChild(renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), true));
+    transitionsForCity(city.id).forEach(t => list.appendChild(buildAdminTransitMini(t)));
+  });
 }
 
 // Build the status filter pills row
@@ -4993,6 +5039,48 @@ function transitionLabel(mode) {
 
 function transitionsForCity(cityId) {
   return (state.transitions || []).filter(t => t.cityId === cityId);
+}
+
+// Compact transit card for the itinerary list view (between city cards).
+// Click → expand the source city to reveal the editor for this leg.
+function buildAdminTransitMini(t) {
+  const isPast = isPastTransition(t);
+  const card = document.createElement('div');
+  card.className = 'transit-mini status-' + (t.status || 'tentative') + (isPast ? ' past' : '');
+  const icon = transitionIcon(t.mode);
+  const carrierBit = (t.carrier || t.number)
+    ? [t.carrier, t.number].filter(Boolean).join(' ')
+    : transitionLabel(t.mode);
+  const srcCity = state.cities.find(c => c.id === t.cityId);
+  const route = (srcCity && srcCity.name && t.toCity)
+    ? srcCity.name + ' → ' + t.toCity
+    : (t.toCity ? '→ ' + t.toCity : '— set destination —');
+  let timeBit = '';
+  if (t.departureDate) {
+    timeBit = fmtDate(t.departureDate);
+    if (t.departureTime) timeBit += ' · ' + t.departureTime;
+    if (t.arrivalTime) timeBit += ' → ' + t.arrivalTime;
+  } else {
+    timeBit = '<span style="color:var(--text-3);font-style:italic">no date</span>';
+  }
+  const statusPillCls = t.status === 'booked' ? 'booked' : t.status === 'shortlisted' ? 'shortlisted' : 'tentative';
+  card.innerHTML = '<span class="transit-mini-icon">' + icon + '</span>'
+    + '<div class="transit-mini-main">'
+    + '<div class="transit-mini-line1">' + escapeHTML(carrierBit) + ' <span class="transit-mini-pill ' + statusPillCls + '">' + (t.status || 'tentative') + '</span></div>'
+    + '<div class="transit-mini-line2">' + escapeHTML(route) + '</div>'
+    + '</div>'
+    + '<div class="transit-mini-time">' + timeBit + '</div>';
+  card.title = 'Click to edit this travel leg';
+  card.onclick = () => {
+    if (!t.cityId) return;
+    openCityIds.add(t.cityId);
+    renderCities();
+    setTimeout(() => {
+      const el = document.querySelector('[data-city-id="' + t.cityId + '"]');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  };
+  return card;
 }
 
 function isPastTransition(t) {
