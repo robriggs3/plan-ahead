@@ -338,6 +338,52 @@
     font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500;
     margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
   }
+  /* ---- Transitions (travel legs) ---- */
+  .transit-section { margin-top: 20px; padding-left: 18px; border-left: 2px dashed var(--border); }
+  .transit-section h3 {
+    font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; font-style: italic;
+    margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+    color: var(--text-2);
+  }
+  .transit-list { display: flex; flex-direction: column; gap: 8px; }
+  .transit-item {
+    background: var(--bg-softer); border: 1px solid var(--border-light); border-radius: 8px;
+    border-left: 3px solid var(--text-3);
+    padding: 12px 14px; transition: border-color 0.2s, background 0.2s;
+  }
+  .transit-item.status-booked { border-left-color: var(--green); }
+  .transit-item.status-shortlisted { border-left-color: var(--blue); }
+  .transit-item.status-tentative { border-left-color: var(--amber); }
+  .transit-item.past { opacity: 0.65; border-left-color: var(--text-3); }
+  .transit-summary {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+    color: var(--text-2);
+    padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--border-light);
+  }
+  .transit-icon { font-size: 18px; line-height: 1; }
+  .transit-summary-text { font-weight: 500; color: var(--text); letter-spacing: 0.02em; }
+  .transit-summary-date { color: var(--text-3); margin-left: auto; }
+  .transit-fields {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  }
+  .transit-fields label, .transit-notes {
+    display: flex; flex-direction: column; gap: 3px;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .transit-fields input, .transit-fields select, .transit-notes textarea {
+    font-family: 'Inter', sans-serif; font-size: 13px; padding: 5px 8px;
+    border: 1px solid var(--border); border-radius: 4px; background: white;
+    color: var(--text); text-transform: none; letter-spacing: normal;
+  }
+  .transit-notes { margin-top: 10px; }
+  .transit-notes textarea { resize: vertical; min-height: 36px; }
+  .transit-actions { margin-top: 10px; text-align: right; }
+  @media (max-width: 720px) {
+    .transit-section { padding-left: 10px; }
+    .transit-fields { grid-template-columns: repeat(2, 1fr); }
+  }
   .accom-add-row {
     background: var(--bg-softer); border-radius: 8px; padding: 12px;
     display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr auto; gap: 6px;
@@ -1494,6 +1540,7 @@ function defaultState() {
   return {
     cities: [],
     ideas: [],
+    transitions: [],
     profile: DEFAULT_PROFILE,
     aiMode: 'copy',
     apiKey: '',
@@ -2635,6 +2682,7 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
   body.appendChild(buildCityNotes(city));
   body.appendChild(buildLatLngRow(city));
   body.appendChild(buildAccommodations(city));
+  body.appendChild(buildTransitions(city));
   body.appendChild(buildResearchButton(city));
   body.appendChild(buildCitySubsections(city));
 
@@ -3691,10 +3739,31 @@ function buildFamilyShareForCurrentState() {
       }))
   })).filter(c => c.name);
 
+  // Transitions: strip cost, confirmation, notes — show only mode/carrier/number/dates/cities
+  const transitions = (state.transitions || [])
+    .filter(t => t.toCity || t.departureDate)  // skip blank
+    .map(t => {
+      // Resolve source city name from cityId
+      const srcCity = (state.cities || []).find(c => c.id === t.cityId);
+      return {
+        mode: t.mode || 'other',
+        status: t.status || 'tentative',
+        fromCity: srcCity ? srcCity.name : '',
+        toCity: t.toCity || '',
+        departureDate: t.departureDate || '',
+        departureTime: t.departureTime || '',
+        arrivalDate: t.arrivalDate || '',
+        arrivalTime: t.arrivalTime || '',
+        carrier: t.carrier || '',
+        number: t.number || ''
+      };
+    });
+
   return buildFamilyShareHTML({
     travelerName: (state.travelerName || '').trim() || 'Your traveler',
     generatedAt: new Date().toISOString(),
-    cities: cities
+    cities: cities,
+    transitions: transitions
   });
 }
 
@@ -3884,6 +3953,17 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .map-legend { display: flex; gap: 16px; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 8px; }
 .map-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; border: 1.5px solid white; box-shadow: 0 0 0 1px var(--border); }
 .empty { color: var(--text-3); font-style: italic; padding: 24px; text-align: center; background: var(--bg-softer); border: 1px dashed var(--border); border-radius: 8px; font-size: 13px; }
+/* Travel legs between cities */
+.transit { display: flex; align-items: center; gap: 12px; margin: 6px 0 6px 22px; padding: 10px 14px; background: var(--bg-softer); border: 1px solid var(--border-light); border-left: 3px solid var(--text-3); border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-2); letter-spacing: 0.02em; }
+.transit.status-booked { border-left-color: var(--green); }
+.transit.status-shortlisted { border-left-color: var(--blue); }
+.transit.status-tentative { border-left-color: var(--amber); }
+.transit.past { opacity: 0.55; }
+.transit-ic { font-size: 16px; line-height: 1; }
+.transit-main { flex: 1; min-width: 0; }
+.transit-line1 { color: var(--text); font-weight: 500; font-size: 12px; }
+.transit-line2 { color: var(--text-3); margin-top: 2px; }
+.transit-time { color: var(--text-2); white-space: nowrap; }
 footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
 footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(--text-3); border-radius: 3px; margin-bottom: 10px; }
 @media (max-width: 600px) {
@@ -3993,7 +4073,11 @@ function render() {
   const cs = document.getElementById('current-section');
   if (current) {
     const daysLeft = Math.round((new Date(current.checkOut + 'T00:00:00') - new Date(TODAY + 'T00:00:00')) / 86400000);
-    cs.innerHTML = '<div class="current-banner"><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + (current.accommodations.length ? '<div class="accom-block"><div class="accom-label">Where they\\'re staying</div>' + renderAccoms(current.accommodations, true) + '</div>' : '') + '</div>';
+    const outbound = transitsFromCity(current.name);
+    const outboundHTML = outbound.length > 0
+      ? '<div class="accom-block"><div class="accom-label">Next leg out</div>' + outbound.map(buildTransit).join('') + '</div>'
+      : '';
+    cs.innerHTML = '<div class="current-banner"><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + (current.accommodations.length ? '<div class="accom-block"><div class="accom-label">Where they\\'re staying</div>' + renderAccoms(current.accommodations, true) + '</div>' : '') + outboundHTML + '</div>';
   } else {
     cs.innerHTML = '<div class="current-banner" style="border-color:var(--border);box-shadow:var(--shadow-sm);padding-top:24px"><div style="text-align:center;color:var(--text-3);font-style:italic;font-family:Fraunces,serif;font-size:18px">Between stays — see upcoming below</div></div>';
   }
@@ -4010,13 +4094,19 @@ function render() {
   if (future.length === 0) {
     fs.innerHTML += '<div class="empty">No upcoming trips planned yet.</div>';
   } else {
-    future.forEach(c => fs.innerHTML += buildLeg(c, false));
+    future.forEach(c => {
+      fs.innerHTML += buildLeg(c, false);
+      transitsFromCity(c.name).forEach(t => fs.innerHTML += buildTransit(t));
+    });
   }
 
   if (past.length > 0) {
     const ps = document.getElementById('past-section');
     ps.innerHTML = '<div class="section-head"><h2>Where they\\'ve been</h2><span class="meta">' + past.length + ' stop' + (past.length===1?'':'s') + '</span></div>';
-    past.forEach(c => ps.innerHTML += buildLeg(c, true));
+    past.forEach(c => {
+      ps.innerHTML += buildLeg(c, true);
+      transitsFromCity(c.name).forEach(t => ps.innerHTML += buildTransit(t));
+    });
   }
 
   initMap(DATA.cities, current);
@@ -4025,6 +4115,40 @@ function render() {
 function buildLeg(c, isPast) {
   const cls = isPast ? 'leg past' : 'leg';
   return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div></div>' + (c.accommodations.length ? '<div class="leg-accom">' + renderAccoms(c.accommodations, false) + '</div>' : '') + '</div>';
+}
+
+// Icon mapper for transit modes (must match the admin app's TRANSITION_MODES)
+const TRANSIT_ICONS = { flight: '✈', train: '🚆', cruise: '🚢', bus: '🚌', ferry: '⛴', drive: '🚗', rideshare: '🚖', other: '➜' };
+const TRANSIT_LABELS = { flight: 'Flight', train: 'Train', cruise: 'Cruise', bus: 'Bus', ferry: 'Ferry', drive: 'Drive', rideshare: 'Rideshare', other: 'Travel' };
+
+function buildTransit(t) {
+  if (!t) return '';
+  const isPast = t.arrivalDate && t.arrivalDate < TODAY;
+  const cls = 'transit status-' + (t.status || 'tentative') + (isPast ? ' past' : '');
+  const icon = TRANSIT_ICONS[t.mode] || '➜';
+  const label = TRANSIT_LABELS[t.mode] || 'Travel';
+  const carrierBit = (t.carrier || t.number) ? [t.carrier, t.number].filter(Boolean).join(' ') : label;
+  const route = (t.fromCity && t.toCity) ? escapeHTML(t.fromCity) + ' → ' + escapeHTML(t.toCity) : (t.toCity ? '→ ' + escapeHTML(t.toCity) : '');
+  let timeBit = '';
+  if (t.departureDate) {
+    timeBit = fmtDate(t.departureDate);
+    if (t.departureTime) timeBit += ' · ' + t.departureTime;
+    if (t.arrivalTime) timeBit += ' → ' + t.arrivalTime;
+  }
+  return '<div class="' + cls + '">' +
+    '<span class="transit-ic">' + icon + '</span>' +
+    '<div class="transit-main">' +
+      '<div class="transit-line1">' + escapeHTML(carrierBit) + '</div>' +
+      '<div class="transit-line2">' + route + '</div>' +
+    '</div>' +
+    '<div class="transit-time">' + timeBit + '</div>' +
+  '</div>';
+}
+
+// Find transitions departing from a given city (matched by name since IDs not exposed to family view)
+function transitsFromCity(cityName) {
+  if (!DATA.transitions) return [];
+  return DATA.transitions.filter(t => t.fromCity === cityName);
 }
 
 function initMap(cities, current) {
@@ -4839,6 +4963,194 @@ function demoteCity(id) {
     },
     'ok'
   );
+}
+
+// ==================== TRANSITIONS (Travel Logistics) ====================
+// Each transition belongs to a source city and connects to a destination.
+// Modes: flight, train, cruise, bus, ferry, drive, rideshare, other.
+// Status mirrors city status (tentative/shortlisted/booked), with auto-past detection.
+
+const TRANSITION_MODES = [
+  { id: 'flight', label: 'Flight', icon: '✈' },
+  { id: 'train', label: 'Train', icon: '🚆' },
+  { id: 'cruise', label: 'Cruise', icon: '🚢' },
+  { id: 'bus', label: 'Bus', icon: '🚌' },
+  { id: 'ferry', label: 'Ferry', icon: '⛴' },
+  { id: 'drive', label: 'Drive', icon: '🚗' },
+  { id: 'rideshare', label: 'Rideshare', icon: '🚖' },
+  { id: 'other', label: 'Other', icon: '➜' }
+];
+
+function transitionIcon(mode) {
+  const m = TRANSITION_MODES.find(x => x.id === mode);
+  return m ? m.icon : '➜';
+}
+
+function transitionLabel(mode) {
+  const m = TRANSITION_MODES.find(x => x.id === mode);
+  return m ? m.label : 'Travel';
+}
+
+function transitionsForCity(cityId) {
+  return (state.transitions || []).filter(t => t.cityId === cityId);
+}
+
+function isPastTransition(t) {
+  if (!t.arrivalDate) return false;
+  return t.arrivalDate < todayISO();
+}
+
+function addTransition(cityId) {
+  const c = state.cities.find(c => c.id === cityId);
+  if (!c) return;
+  if (!state.transitions) state.transitions = [];
+  // Find next city in chronological order to pre-fill toCity (smart default)
+  const sorted = sortedCities();
+  const idx = sorted.findIndex(x => x.id === cityId);
+  const nextCity = (idx >= 0 && idx < sorted.length - 1) ? sorted[idx + 1] : null;
+  state.transitions.push({
+    id: newId(),
+    cityId: cityId,
+    toCity: nextCity ? nextCity.name : '',
+    mode: 'flight',
+    status: 'tentative',
+    departureDate: c.checkOut || '',
+    departureTime: '',
+    arrivalDate: nextCity ? (nextCity.checkIn || c.checkOut || '') : (c.checkOut || ''),
+    arrivalTime: '',
+    carrier: '',
+    number: '',
+    confirmation: '',
+    cost: '',
+    currency: 'USD',
+    link: '',
+    notes: ''
+  });
+  saveState();
+  renderCities();
+}
+
+function updateTransition(id, key, value) {
+  const t = (state.transitions || []).find(t => t.id === id);
+  if (!t) return;
+  t[key] = value;
+  saveState();
+  // For status change, re-render to refresh filter counts and section grouping
+  if (key === 'status') { renderCounters(); renderCities(); }
+}
+
+function deleteTransition(id) {
+  if (!confirm('Delete this travel leg? This cannot be undone (use snapshots to recover).')) return;
+  state.transitions = (state.transitions || []).filter(t => t.id !== id);
+  saveState();
+  renderCities();
+  renderCounters();
+  toast('Travel leg deleted.', 'ok');
+}
+
+// Build the transitions section inside a city's expanded body.
+function buildTransitions(city) {
+  const wrap = document.createElement('div');
+  wrap.className = 'transit-section';
+  const cid = city.id;
+  wrap.innerHTML = '<h3>Outbound travel <span style="font-weight:400;color:var(--text-3);font-size:12px;font-family:JetBrains Mono,monospace;letter-spacing:0.04em;margin-left:6px">flights, trains, ferries…</span><div style="display:inline-flex;gap:8px;margin-left:auto;align-items:center"><button class="btn-secondary" onclick="addTransition(\''+cid+'\')">+ Add leg</button></div></h3>';
+
+  const list = document.createElement('div');
+  list.className = 'transit-list';
+  const transitions = transitionsForCity(cid);
+  if (transitions.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'sub-empty';
+    empty.textContent = 'No outbound travel logged yet. Add a flight/train/etc to track booking.';
+    list.appendChild(empty);
+  } else {
+    transitions.forEach(t => list.appendChild(buildTransitionRow(city, t)));
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function buildTransitionRow(city, t) {
+  const item = document.createElement('div');
+  const isPast = isPastTransition(t);
+  item.className = 'transit-item status-' + (t.status || 'tentative') + (isPast ? ' past' : '');
+  const tid = t.id;
+  const icon = transitionIcon(t.mode);
+
+  // Compact summary line (always visible)
+  const summary = document.createElement('div');
+  summary.className = 'transit-summary';
+  const summaryLine = (t.carrier || t.number)
+    ? [t.carrier, t.number].filter(Boolean).join(' ')
+    : transitionLabel(t.mode);
+  const dateBit = t.departureDate
+    ? fmtDate(t.departureDate) + (t.departureTime ? ' · ' + t.departureTime : '')
+    : '<span class="muted">— no date —</span>';
+  summary.innerHTML = '<span class="transit-icon">' + icon + '</span><span class="transit-summary-text">' + escapeHTML(summaryLine) + ' → ' + escapeHTML(t.toCity || '?') + '</span><span class="transit-summary-date">' + dateBit + '</span>';
+  item.appendChild(summary);
+
+  // Editable fields grid
+  const grid = document.createElement('div');
+  grid.className = 'transit-fields';
+  grid.innerHTML = `
+    <label>Mode
+      <select onchange="updateTransition('${tid}','mode',this.value); renderCities();">
+        ${TRANSITION_MODES.map(m => `<option value="${m.id}"${t.mode===m.id?' selected':''}>${m.icon} ${m.label}</option>`).join('')}
+      </select>
+    </label>
+    <label>Status
+      <select onchange="updateTransition('${tid}','status',this.value)">
+        <option value="tentative"${t.status==='tentative'?' selected':''}>Tentative</option>
+        <option value="shortlisted"${t.status==='shortlisted'?' selected':''}>Shortlisted</option>
+        <option value="booked"${t.status==='booked'?' selected':''}>Booked</option>
+      </select>
+    </label>
+    <label>To city
+      <input type="text" value="${escapeHTML(t.toCity||'')}" placeholder="e.g. Atlanta" oninput="updateTransition('${tid}','toCity',this.value)">
+    </label>
+    <label>Carrier
+      <input type="text" value="${escapeHTML(t.carrier||'')}" placeholder="United, Renfe, Royal Caribbean…" oninput="updateTransition('${tid}','carrier',this.value)">
+    </label>
+    <label>Number / name
+      <input type="text" value="${escapeHTML(t.number||'')}" placeholder="UA456 or voyage name" oninput="updateTransition('${tid}','number',this.value)">
+    </label>
+    <label>Confirmation
+      <input type="text" value="${escapeHTML(t.confirmation||'')}" placeholder="ABC123" oninput="updateTransition('${tid}','confirmation',this.value)">
+    </label>
+    <label>Departure date
+      <input type="date" value="${t.departureDate||''}" oninput="updateTransition('${tid}','departureDate',this.value)">
+    </label>
+    <label>Departure time
+      <input type="time" value="${t.departureTime||''}" oninput="updateTransition('${tid}','departureTime',this.value)">
+    </label>
+    <label>Arrival date
+      <input type="date" value="${t.arrivalDate||''}" oninput="updateTransition('${tid}','arrivalDate',this.value)">
+    </label>
+    <label>Arrival time
+      <input type="time" value="${t.arrivalTime||''}" oninput="updateTransition('${tid}','arrivalTime',this.value)">
+    </label>
+    <label>Cost
+      <input type="number" min="0" step="1" value="${t.cost||''}" placeholder="0" oninput="updateTransition('${tid}','cost',this.value)">
+    </label>
+    <label>Booking link
+      <input type="url" value="${escapeHTML(t.link||'')}" placeholder="https://…" oninput="updateTransition('${tid}','link',this.value)">
+    </label>
+  `;
+  item.appendChild(grid);
+
+  // Notes (full width)
+  const notes = document.createElement('label');
+  notes.className = 'transit-notes';
+  notes.innerHTML = `Notes (admin only — not shown in family share)<textarea rows="2" placeholder="Layover info, terminal, etc." oninput="updateTransition('${tid}','notes',this.value)">${escapeHTML(t.notes||'')}</textarea>`;
+  item.appendChild(notes);
+
+  // Delete button
+  const del = document.createElement('div');
+  del.className = 'transit-actions';
+  del.innerHTML = '<button class="btn-secondary danger" onclick="deleteTransition(\''+tid+'\')">Delete leg</button>';
+  item.appendChild(del);
+
+  return item;
 }
 
 function addAccommodation(cityId) {

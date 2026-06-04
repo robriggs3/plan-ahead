@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rob · Travel Plan</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%23c72027'/%3E%3Ctext x='50' y='74' font-family='Georgia,serif' font-size='72' font-weight='600' fill='white' text-anchor='middle'%3ER%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,1,400;9..144,1,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root {
+  --bg: #cccccc; --bg-card: #ffffff; --bg-soft: #bdbdbd; --bg-softer: #e8e8e8;
+  --border: #a8a8a8; --border-light: #d0d0d0;
+  --text: #242424; --text-2: #4a4a4a; --text-3: #666666;
+  --accent: #c72027; --accent-hover: #9c181d; --accent-soft: #f3d1d3;
+  --green: #2d7d34; --green-soft: #d4e8d5;
+  --blue: #2c5d8a; --blue-soft: #d3e0ee;
+  --amber: #8a6d00; --amber-soft: #ede1be;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.10);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 36px 20px 60px; -webkit-font-smoothing: antialiased; }
+.doc { max-width: 880px; margin: 0 auto; }
+.hero { margin-bottom: 36px; padding: 48px 0 28px; border-bottom: 1px solid var(--border); position: relative; }
+.hero::before { content: 'TRAVEL TRACKER'; position: absolute; top: 0; left: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); letter-spacing: 0.28em; padding: 5px 11px; border: 1px solid var(--accent); border-radius: 2px; }
+.hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: 56px; font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; }
+.hero h1 .em { color: var(--accent); font-style: italic; font-weight: 500; }
+.hero .sub { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.16em; text-transform: uppercase; }
+.hero .gen-date { position: absolute; top: 0; right: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
+.current-banner { background: var(--bg-card); border: 1px solid var(--accent); border-radius: 12px; box-shadow: 0 4px 20px rgba(199,32,39,0.10), 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 32px; position: relative; padding: 38px 28px 24px; }
+.current-banner::before { content: '● You\'re here'; position: absolute; top: 0; left: 0; background: var(--accent); color: white; padding: 5px 14px; border-radius: 0 0 8px 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
+.current-banner h2 { font-family: 'Fraunces', Georgia, serif; font-size: 32px; font-weight: 500; line-height: 1.15; }
+.current-banner h2 .country { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.12em; font-weight: 400; text-transform: uppercase; margin-left: 12px; vertical-align: middle; }
+.current-banner .dates { margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-2); letter-spacing: 0.04em; }
+.current-banner .dates .days-left { color: var(--accent); font-weight: 500; margin-left: 8px; }
+.current-banner .accom-block { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-light); }
+.current-banner .accom-label { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.accom-item { padding: 10px 12px; margin-bottom: 6px; background: var(--bg-softer); border: 1px solid var(--border-light); border-radius: 6px; font-size: 13px; color: var(--text-2); }
+.accom-item .accom-name { font-weight: 500; color: var(--text); }
+.accom-item .accom-meta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.04em; margin-top: 3px; }
+.accom-item a { color: var(--accent); text-decoration: none; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+.accom-item a:hover { text-decoration: underline; }
+.accom-item.current { background: var(--accent-soft); border-color: var(--accent); border-left: 4px solid var(--accent); }
+.accom-item.current .accom-name { color: var(--accent); font-weight: 600; }
+.accom-item.current::after { content: 'TONIGHT'; display: inline-block; margin-left: 8px; font-family: 'JetBrains Mono', monospace; font-size: 9px; background: var(--accent); color: white; padding: 1px 6px; border-radius: 3px; letter-spacing: 0.1em; font-weight: 600; vertical-align: middle; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 40px 0 18px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.section-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 28px; font-weight: 500; font-style: italic; line-height: 1.2; }
+.section-head .meta { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.14em; text-transform: uppercase; }
+.leg { background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 10px; padding: 18px 22px; margin-bottom: 10px; box-shadow: var(--shadow-sm); transition: box-shadow 0.2s, border-color 0.2s; }
+.leg:hover { box-shadow: var(--shadow-md); border-color: var(--border); }
+.leg.past { opacity: 0.78; }
+.leg-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+.leg-title { font-family: 'Fraunces', Georgia, serif; font-size: 20px; font-weight: 500; line-height: 1.2; }
+.leg-title .country { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.1em; font-weight: 400; text-transform: uppercase; margin-left: 10px; vertical-align: middle; }
+.leg-dates { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-2); letter-spacing: 0.03em; }
+.leg-accom { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light); }
+.pill { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; font-weight: 500; margin-left: 8px; vertical-align: middle; display: inline-block; }
+.pill.booked { background: var(--green-soft); color: var(--green); }
+.pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
+.pill.tentative { background: var(--amber-soft); color: var(--amber); }
+.map-wrap { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 8px; }
+#map { height: 420px; z-index: 1; }
+.map-reset-btn { position: absolute; top: 10px; left: 52px; z-index: 1000; background: white; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; padding: 5px 10px; font-size: 11px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.15s; }
+.map-reset-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.map-legend { display: flex; gap: 16px; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 8px; }
+.map-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; border: 1.5px solid white; box-shadow: 0 0 0 1px var(--border); }
+.empty { color: var(--text-3); font-style: italic; padding: 24px; text-align: center; background: var(--bg-softer); border: 1px dashed var(--border); border-radius: 8px; font-size: 13px; }
+/* Travel legs between cities */
+.transit { display: flex; align-items: center; gap: 12px; margin: 6px 0 6px 22px; padding: 10px 14px; background: var(--bg-softer); border: 1px solid var(--border-light); border-left: 3px solid var(--text-3); border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-2); letter-spacing: 0.02em; }
+.transit.status-booked { border-left-color: var(--green); }
+.transit.status-shortlisted { border-left-color: var(--blue); }
+.transit.status-tentative { border-left-color: var(--amber); }
+.transit.past { opacity: 0.55; }
+.transit-ic { font-size: 16px; line-height: 1; }
+.transit-main { flex: 1; min-width: 0; }
+.transit-line1 { color: var(--text); font-weight: 500; font-size: 12px; }
+.transit-line2 { color: var(--text-3); margin-top: 2px; }
+.transit-time { color: var(--text-2); white-space: nowrap; }
+footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
+footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(--text-3); border-radius: 3px; margin-bottom: 10px; }
+@media (max-width: 600px) {
+  body { padding: 24px 14px 50px; }
+  .hero { padding-top: 56px; }
+  .hero h1 { font-size: 38px; }
+  .hero .gen-date { position: static; display: block; margin-top: 8px; }
+  .current-banner { padding: 36px 20px 20px; }
+  .current-banner h2 { font-size: 24px; }
+  .current-banner h2 .country { display: block; margin: 4px 0 0; }
+  .section-head h2 { font-size: 22px; }
+  .leg-title { font-size: 17px; }
+  .leg-title .country { display: block; margin: 4px 0 0; }
+  #map { height: 320px; }
+}
+</style>
+</head>
+<body>
+<div class="doc">
+  <header class="hero">
+    <div class="gen-date" id="gen-date"></div>
+    <h1>Rob · <span class="em">on the move</span></h1>
+    <div class="sub" id="cover-meta">Loading…</div>
+  </header>
+
+  <div id="current-section"></div>
+
+  <div class="section-head"><h2>The map</h2><span class="meta">All stops</span></div>
+  <div class="map-wrap"><button class="map-reset-btn" onclick="resetMapView()" title="Fit all pins in view">⤢ Reset view</button><div id="map"></div></div>
+  <div class="map-legend" id="map-legend"></div>
+
+  <div id="future-section"></div>
+  <div id="past-section"></div>
+
+  <footer>
+    <div class="stamp">Eyes only · For family</div>
+    <div id="footer-meta"></div>
+  </footer>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const DATA = {"travelerName":"Rob","generatedAt":"2026-06-04T10:51:51.288Z","cities":[{"name":"Malaga","country":"Spain","state":"","status":"booked","checkIn":"2026-04-12","checkOut":"2026-06-05","lat":36.7,"lng":-4.4,"accommodations":[]},{"name":"Atlanta","country":"United States","state":"GA","status":"booked","checkIn":"2026-06-05","checkOut":"2026-06-11","lat":33.7,"lng":-84.4,"accommodations":[]}],"transitions":[{"mode":"flight","status":"booked","fromCity":"Malaga","toCity":"Atlanta","departureDate":"2026-06-05","departureTime":"13:00","arrivalDate":"2026-06-05","arrivalTime":"17:30","carrier":"Delta","number":"DL123"},{"mode":"train","status":"tentative","fromCity":"Atlanta","toCity":"Miami","departureDate":"2026-06-11","departureTime":"09:00","arrivalDate":"2026-06-11","arrivalTime":"20:00","carrier":"Amtrak","number":"Silver Meteor"}]};
+const TODAY = new Date().toISOString().slice(0,10);
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function escapeHTML(s) {
+  return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Status -> marker color (mirrors itinerary pill colors). Past trumps status (gray). Current trumps everything (red).
+function colorFor(city, isCurrent) {
+  if (isCurrent) return '#c72027';
+  if (city.checkOut && city.checkOut <= TODAY) return '#8a8a8a';
+  const s = city.status || 'tentative';
+  if (s === 'booked') return '#2d7d34';
+  if (s === 'shortlisted') return '#2c5d8a';
+  return '#8a6d00';
+}
+
+function isCurrentAccommodation(a) {
+  if (!a.checkIn || !a.checkOut) return false;
+  return a.checkIn <= TODAY && a.checkOut > TODAY;
+}
+
+function renderAccoms(accoms, isCurrentCity) {
+  if (!accoms || !accoms.length) return '';
+  const booked = accoms.filter(a => a.status === 'booked');
+  const list = booked.length > 0 ? booked : accoms;
+  return list.map(a => {
+    const isCurrentAccom = isCurrentCity && isCurrentAccommodation(a);
+    const cls = 'accom-item' + (isCurrentAccom ? ' current' : '');
+    const linkBit = a.link ? ' · <a href="' + escapeHTML(a.link) + '" target="_blank" rel="noopener">view booking</a>' : '';
+    const nbhdBit = a.neighborhood ? escapeHTML(a.neighborhood) + ' · ' : '';
+    const datesBit = a.checkIn && a.checkOut ? fmtDate(a.checkIn) + ' → ' + fmtDate(a.checkOut) : '';
+    return '<div class="' + cls + '"><div class="accom-name">' + escapeHTML(a.name) + '</div><div class="accom-meta">' + nbhdBit + datesBit + linkBit + '</div></div>';
+  }).join('');
+}
+
+function pill(status) {
+  const valid = ['booked','shortlisted','tentative'];
+  if (!valid.includes(status)) return '';
+  return '<span class="pill ' + status + '">' + status + '</span>';
+}
+
+function render() {
+  let current = null;
+  const past = [], future = [];
+  DATA.cities.forEach(c => {
+    if (!c.checkIn || !c.checkOut) { future.push(c); return; }
+    if (c.checkIn <= TODAY && c.checkOut > TODAY) { current = c; return; }
+    if (c.checkOut <= TODAY) past.push(c);
+    else future.push(c);
+  });
+  past.sort((a,b) => (b.checkIn||'').localeCompare(a.checkIn||''));
+  future.sort((a,b) => (a.checkIn||'').localeCompare(b.checkIn||''));
+
+  const totalLabel = DATA.cities.length + ' stops · ' + past.length + ' past · ' + (current ? '1 current · ' : '') + future.length + ' upcoming';
+  document.getElementById('cover-meta').textContent = totalLabel;
+  document.getElementById('gen-date').textContent = 'Updated ' + new Date(DATA.generatedAt).toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  document.getElementById('footer-meta').textContent = 'Auto-updating · Last refresh on visit';
+
+  const cs = document.getElementById('current-section');
+  if (current) {
+    const daysLeft = Math.round((new Date(current.checkOut + 'T00:00:00') - new Date(TODAY + 'T00:00:00')) / 86400000);
+    const outbound = transitsFromCity(current.name);
+    const outboundHTML = outbound.length > 0
+      ? '<div class="accom-block"><div class="accom-label">Next leg out</div>' + outbound.map(buildTransit).join('') + '</div>'
+      : '';
+    cs.innerHTML = '<div class="current-banner"><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + (current.accommodations.length ? '<div class="accom-block"><div class="accom-label">Where they\'re staying</div>' + renderAccoms(current.accommodations, true) + '</div>' : '') + outboundHTML + '</div>';
+  } else {
+    cs.innerHTML = '<div class="current-banner" style="border-color:var(--border);box-shadow:var(--shadow-sm);padding-top:24px"><div style="text-align:center;color:var(--text-3);font-style:italic;font-family:Fraunces,serif;font-size:18px">Between stays — see upcoming below</div></div>';
+  }
+
+  document.getElementById('map-legend').innerHTML =
+    '<span><span class="dot" style="background:#c72027"></span>Currently here</span>' +
+    '<span><span class="dot" style="background:#2d7d34"></span>Booked</span>' +
+    '<span><span class="dot" style="background:#2c5d8a"></span>Shortlisted</span>' +
+    '<span><span class="dot" style="background:#8a6d00"></span>Tentative</span>' +
+    '<span><span class="dot" style="background:#8a8a8a"></span>Past</span>';
+
+  const fs = document.getElementById('future-section');
+  fs.innerHTML = '<div class="section-head"><h2>What\'s coming up</h2><span class="meta">' + future.length + ' stop' + (future.length===1?'':'s') + '</span></div>';
+  if (future.length === 0) {
+    fs.innerHTML += '<div class="empty">No upcoming trips planned yet.</div>';
+  } else {
+    future.forEach(c => {
+      fs.innerHTML += buildLeg(c, false);
+      transitsFromCity(c.name).forEach(t => fs.innerHTML += buildTransit(t));
+    });
+  }
+
+  if (past.length > 0) {
+    const ps = document.getElementById('past-section');
+    ps.innerHTML = '<div class="section-head"><h2>Where they\'ve been</h2><span class="meta">' + past.length + ' stop' + (past.length===1?'':'s') + '</span></div>';
+    past.forEach(c => {
+      ps.innerHTML += buildLeg(c, true);
+      transitsFromCity(c.name).forEach(t => ps.innerHTML += buildTransit(t));
+    });
+  }
+
+  initMap(DATA.cities, current);
+}
+
+function buildLeg(c, isPast) {
+  const cls = isPast ? 'leg past' : 'leg';
+  return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div></div>' + (c.accommodations.length ? '<div class="leg-accom">' + renderAccoms(c.accommodations, false) + '</div>' : '') + '</div>';
+}
+
+// Icon mapper for transit modes (must match the admin app's TRANSITION_MODES)
+const TRANSIT_ICONS = { flight: '✈', train: '🚆', cruise: '🚢', bus: '🚌', ferry: '⛴', drive: '🚗', rideshare: '🚖', other: '➜' };
+const TRANSIT_LABELS = { flight: 'Flight', train: 'Train', cruise: 'Cruise', bus: 'Bus', ferry: 'Ferry', drive: 'Drive', rideshare: 'Rideshare', other: 'Travel' };
+
+function buildTransit(t) {
+  if (!t) return '';
+  const isPast = t.arrivalDate && t.arrivalDate < TODAY;
+  const cls = 'transit status-' + (t.status || 'tentative') + (isPast ? ' past' : '');
+  const icon = TRANSIT_ICONS[t.mode] || '➜';
+  const label = TRANSIT_LABELS[t.mode] || 'Travel';
+  const carrierBit = (t.carrier || t.number) ? [t.carrier, t.number].filter(Boolean).join(' ') : label;
+  const route = (t.fromCity && t.toCity) ? escapeHTML(t.fromCity) + ' → ' + escapeHTML(t.toCity) : (t.toCity ? '→ ' + escapeHTML(t.toCity) : '');
+  let timeBit = '';
+  if (t.departureDate) {
+    timeBit = fmtDate(t.departureDate);
+    if (t.departureTime) timeBit += ' · ' + t.departureTime;
+    if (t.arrivalTime) timeBit += ' → ' + t.arrivalTime;
+  }
+  return '<div class="' + cls + '">' +
+    '<span class="transit-ic">' + icon + '</span>' +
+    '<div class="transit-main">' +
+      '<div class="transit-line1">' + escapeHTML(carrierBit) + '</div>' +
+      '<div class="transit-line2">' + route + '</div>' +
+    '</div>' +
+    '<div class="transit-time">' + timeBit + '</div>' +
+  '</div>';
+}
+
+// Find transitions departing from a given city (matched by name since IDs not exposed to family view)
+function transitsFromCity(cityName) {
+  if (!DATA.transitions) return [];
+  return DATA.transitions.filter(t => t.fromCity === cityName);
+}
+
+function initMap(cities, current) {
+  const valid = cities.filter(c => typeof c.lat === 'number' && typeof c.lng === 'number');
+  if (valid.length === 0) {
+    document.getElementById('map').innerHTML = '<div class="empty" style="margin:20px">No locations to map yet.</div>';
+    document.querySelector('.map-reset-btn').style.display = 'none';
+    return;
+  }
+  const map = L.map('map').setView([valid[0].lat, valid[0].lng], 3);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 18 }).addTo(map);
+  const bounds = [];
+  valid.forEach(c => {
+    const isCurrent = current && c.name === current.name && c.checkIn === current.checkIn;
+    const color = colorFor(c, isCurrent);
+    const radius = isCurrent ? 12 : 7;
+    const marker = L.circleMarker([c.lat, c.lng], { radius: radius, color: 'white', weight: 2, fillColor: color, fillOpacity: 0.95 }).addTo(map);
+    const datesBit = c.checkIn ? '<br><small style="font-family:JetBrains Mono,monospace;color:#666">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</small>' : '';
+    const statusBit = !isCurrent && c.status ? '<br><small style="color:' + color + ';font-weight:600;text-transform:uppercase;letter-spacing:0.08em;font-family:JetBrains Mono,monospace;font-size:9px">' + c.status + '</small>' : '';
+    marker.bindPopup('<strong style="font-family:Fraunces,serif;font-size:15px">' + escapeHTML(c.name) + '</strong><br><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:#666;letter-spacing:0.08em;text-transform:uppercase">' + escapeHTML(c.country) + '</span>' + datesBit + statusBit + (isCurrent ? '<br><strong style="color:#c72027;font-family:JetBrains Mono,monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase">★ Currently here</strong>' : ''));
+    bounds.push([c.lat, c.lng]);
+  });
+  // Store for reset button
+  window._famMap = map;
+  window._famBounds = bounds;
+  if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 8 });
+}
+
+function resetMapView() {
+  if (!window._famMap || !window._famBounds) return;
+  if (window._famBounds.length > 1) {
+    window._famMap.fitBounds(window._famBounds, { padding: [40, 40], maxZoom: 8 });
+  } else if (window._famBounds.length === 1) {
+    window._famMap.setView(window._famBounds[0], 8);
+  }
+}
+
+render();
+</script>
+</body>
+</html>
