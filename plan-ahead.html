@@ -2228,6 +2228,8 @@ function renderNow() {
         if (oc.includes('demoteCity') || oc.includes('deleteCity')) btn.remove();
       });
       elevatedContainer.appendChild(card);
+      // Append outbound transit cards so the user sees what's booked/unbooked at a glance
+      transitionsForCity(current.id).forEach(t => elevatedContainer.appendChild(buildAdminTransitMini(t)));
     } else {
       // Hide section when no current city
       if (whereSection) whereSection.style.display = 'none';
@@ -3962,7 +3964,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .hero .sub { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.16em; text-transform: uppercase; }
 .hero .gen-date { position: absolute; top: 0; right: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
 .current-banner { background: var(--bg-card); border: 1px solid var(--accent); border-radius: 12px; box-shadow: 0 4px 20px rgba(199,32,39,0.10), 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 32px; position: relative; padding: 38px 28px 24px; }
-.current-banner::before { content: '● You\\'re here'; position: absolute; top: 0; left: 0; background: var(--accent); color: white; padding: 5px 14px; border-radius: 0 0 8px 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
+.you-are-here-badge { position: absolute; top: 0; left: 0; background: var(--accent); color: white; padding: 5px 14px; border-radius: 0 0 8px 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
 .current-banner h2 { font-family: 'Fraunces', Georgia, serif; font-size: 32px; font-weight: 500; line-height: 1.15; }
 .current-banner h2 .country { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.12em; font-weight: 400; text-transform: uppercase; margin-left: 12px; vertical-align: middle; }
 .current-banner .dates { margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text-2); letter-spacing: 0.04em; }
@@ -4053,6 +4055,7 @@ footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(
 <script>
 const DATA = ${data};
 const TODAY = new Date().toISOString().slice(0,10);
+const TRAVELER = (DATA.travelerName && DATA.travelerName.trim()) || 'They';
 
 function fmtDate(iso) {
   if (!iso) return '—';
@@ -4123,7 +4126,7 @@ function render() {
     const outboundHTML = outbound.length > 0
       ? '<div class="accom-block"><div class="accom-label">Next leg out</div>' + outbound.map(buildTransit).join('') + '</div>'
       : '';
-    cs.innerHTML = '<div class="current-banner"><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + (current.accommodations.length ? '<div class="accom-block"><div class="accom-label">Where they\\'re staying</div>' + renderAccoms(current.accommodations, true) + '</div>' : '') + outboundHTML + '</div>';
+    cs.innerHTML = '<div class="current-banner"><div class="you-are-here-badge">● ' + escapeHTML(TRAVELER) + ' is here</div><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + (current.accommodations.length ? '<div class="accom-block"><div class="accom-label">Where ' + escapeHTML(TRAVELER) + ' is staying</div>' + renderAccoms(current.accommodations, true) + '</div>' : '') + outboundHTML + '</div>';
   } else {
     cs.innerHTML = '<div class="current-banner" style="border-color:var(--border);box-shadow:var(--shadow-sm);padding-top:24px"><div style="text-align:center;color:var(--text-3);font-style:italic;font-family:Fraunces,serif;font-size:18px">Between stays — see upcoming below</div></div>';
   }
@@ -4148,7 +4151,7 @@ function render() {
 
   if (past.length > 0) {
     const ps = document.getElementById('past-section');
-    ps.innerHTML = '<div class="section-head"><h2>Where they\\'ve been</h2><span class="meta">' + past.length + ' stop' + (past.length===1?'':'s') + '</span></div>';
+    ps.innerHTML = '<div class="section-head"><h2>Where ' + escapeHTML(TRAVELER) + ' has been</h2><span class="meta">' + past.length + ' stop' + (past.length===1?'':'s') + '</span></div>';
     past.forEach(c => {
       ps.innerHTML += buildLeg(c, true);
       transitsFromCity(c.name).forEach(t => ps.innerHTML += buildTransit(t));
@@ -4214,7 +4217,7 @@ function initMap(cities, current) {
     const marker = L.circleMarker([c.lat, c.lng], { radius: radius, color: 'white', weight: 2, fillColor: color, fillOpacity: 0.95 }).addTo(map);
     const datesBit = c.checkIn ? '<br><small style="font-family:JetBrains Mono,monospace;color:#666">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</small>' : '';
     const statusBit = !isCurrent && c.status ? '<br><small style="color:' + color + ';font-weight:600;text-transform:uppercase;letter-spacing:0.08em;font-family:JetBrains Mono,monospace;font-size:9px">' + c.status + '</small>' : '';
-    marker.bindPopup('<strong style="font-family:Fraunces,serif;font-size:15px">' + escapeHTML(c.name) + '</strong><br><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:#666;letter-spacing:0.08em;text-transform:uppercase">' + escapeHTML(c.country) + '</span>' + datesBit + statusBit + (isCurrent ? '<br><strong style="color:#c72027;font-family:JetBrains Mono,monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase">★ Currently here</strong>' : ''));
+    marker.bindPopup('<strong style="font-family:Fraunces,serif;font-size:15px">' + escapeHTML(c.name) + '</strong><br><span style="font-family:JetBrains Mono,monospace;font-size:10px;color:#666;letter-spacing:0.08em;text-transform:uppercase">' + escapeHTML(c.country) + '</span>' + datesBit + statusBit + (isCurrent ? '<br><strong style="color:#c72027;font-family:JetBrains Mono,monospace;font-size:10px;letter-spacing:0.1em;text-transform:uppercase">★ ' + escapeHTML(TRAVELER) + ' is here</strong>' : ''));
     bounds.push([c.lat, c.lng]);
   });
   // Store for reset button
