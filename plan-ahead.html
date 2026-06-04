@@ -1927,10 +1927,15 @@ function uncoveredNights(city) {
     }
   });
 
-  // Mark dates covered by booked overnight transit from this city
-  // (a redeye flight, sleeper train, cruise overnight counts as "covered")
+  // Mark dates covered by ANY booked overnight transit — not just outgoing from this city.
+  // An overnight redeye, sleeper train, or multi-night cruise gives the traveler a place
+  // to be even though they're not at any accommodation. Whether the transit is "outgoing"
+  // from the current city, "incoming" to it, or part of an entirely separate leg, the
+  // calendar night between departureDate and arrivalDate is covered uniformly.
+  // (Example: Atlanta → CDG redeye attached to Atlanta's cityId still covers its overnight
+  // calendar night for any city whose date range includes that night.)
   (state.transitions || []).forEach(t => {
-    if (t.cityId !== city.id || t.status !== 'booked') return;
+    if (t.status !== 'booked') return;
     if (!t.departureDate || !t.arrivalDate) return;
     if (t.departureDate === t.arrivalDate) return; // same-day, doesn't cover a night
     let d = new Date(t.departureDate + 'T12:00:00');
