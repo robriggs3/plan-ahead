@@ -333,11 +333,38 @@
   }
 
   /* ACCOMMODATIONS (special card) */
-  .accom-section { margin-top: 20px; }
-  .accom-section h3 {
-    font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500;
-    margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
+  /* ---- Unified city-body section block. Used for any primary content area within
+     a city (Accommodations, Outbound travel). Provides consistent visual treatment
+     so similarly-hierarchical sections look and behave the same. ---- */
+  .city-block {
+    background: var(--bg-softer);
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-top: 18px;
   }
+  .city-block + .city-block { margin-top: 14px; }
+  .city-block-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; margin-bottom: 12px; flex-wrap: wrap;
+  }
+  .city-block-title {
+    font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500;
+    margin: 0; display: flex; align-items: baseline; gap: 6px;
+    color: var(--text); flex-wrap: wrap;
+  }
+  .city-block-subtitle {
+    font-weight: 400; color: var(--text-3); font-size: 12px;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.04em;
+    font-style: italic;
+  }
+  .city-block-actions {
+    display: inline-flex; gap: 8px; align-items: center; margin-left: auto;
+    flex-shrink: 0;
+  }
+  /* Legacy aliases — both accom-section and transit-section now use .city-block too,
+     so these are kept for any external references but no longer carry standalone styles. */
+  .accom-section, .transit-section { /* now styled via .city-block */ }
   /* Uncovered nights warning */
   .uncovered-flag {
     color: var(--amber); font-weight: 500; margin-left: 4px;
@@ -346,7 +373,7 @@
   .uncovered-panel {
     background: var(--amber-soft); border: 1px solid var(--amber);
     border-left: 4px solid var(--amber); border-radius: 8px;
-    padding: 10px 14px; margin-bottom: 10px;
+    padding: 10px 14px; margin-bottom: 12px;
   }
   .uncovered-head {
     color: var(--amber); font-size: 13px; line-height: 1.4;
@@ -358,8 +385,6 @@
   .uncovered-note {
     margin-top: 6px; font-size: 11px; color: var(--text-2); line-height: 1.5;
   }
-  /* ---- Transitions (travel legs) ---- */
-  .transit-section { margin-top: 20px; padding-left: 18px; border-left: 2px dashed var(--border); }
   /* ---- Inline transit summary card (between cities in itinerary list) ---- */
   .transit-mini {
     display: flex; align-items: center; gap: 12px;
@@ -398,14 +423,9 @@
     .transit-mini { margin-left: 12px; flex-wrap: wrap; }
     .transit-mini-time { width: 100%; margin-top: 4px; }
   }
-  .transit-section h3 {
-    font-family: 'Fraunces', Georgia, serif; font-size: 17px; font-weight: 500; font-style: italic;
-    margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;
-    color: var(--text-2);
-  }
   .transit-list { display: flex; flex-direction: column; gap: 8px; }
   .transit-item {
-    background: var(--bg-softer); border: 1px solid var(--border-light); border-radius: 8px;
+    background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;
     border-left: 3px solid var(--text-3);
     padding: 12px 14px; transition: border-color 0.2s, background 0.2s;
   }
@@ -457,11 +477,11 @@
   }
   .accom-list { display: flex; flex-direction: column; gap: 8px; }
   .accom-item {
-    background: var(--bg-softer); border: 1px solid var(--border-light); border-radius: 8px;
+    background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;
     padding: 12px; transition: box-shadow 0.2s, border-color 0.2s, background 0.2s;
   }
   .accom-item.open {
-    background: var(--bg-card); border-color: var(--border);
+    border-color: var(--border);
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
   }
   .accom-row1 {
@@ -2977,16 +2997,15 @@ function buildCityNotes(city) {
 // Accommodations
 function buildAccommodations(city) {
   const wrap = document.createElement('div');
-  wrap.className = 'accom-section';
+  wrap.className = 'city-block accom-section';
   const capturedId = city.id;
 
-  // Uncovered-nights panel: rendered FIRST (above the section header + Add button) so the
-  // warning is visible immediately on city expand, not tucked beneath the action buttons.
+  // Uncovered-nights panel: rendered FIRST inside the block (above the section header)
+  // so the warning is visible immediately on city expand.
   const uncovered = uncoveredNights(city);
   if (uncovered.length > 0) {
     const panel = document.createElement('div');
     panel.className = 'uncovered-panel';
-    // Group consecutive dates into ranges for cleaner display
     const ranges = [];
     let curStart = uncovered[0], curEnd = uncovered[0];
     for (let i = 1; i < uncovered.length; i++) {
@@ -3008,19 +3027,27 @@ function buildAccommodations(city) {
     wrap.appendChild(panel);
   }
 
-  // Section header + actions (AFTER warning panel)
-  wrap.insertAdjacentHTML('beforeend', '<h3>Accommodations <div style="display:inline-flex;gap:8px;margin-left:auto;align-items:center"><button class="btn-secondary" onclick="openBatchScoreModalForAccoms(\''+capturedId+'\')" title="Score all properties in one batched API call">⚡ Score all</button><button class="btn-secondary" onclick="addAccommodation(\''+capturedId+'\')">+ Add</button></div></h3>');
+  // Standardized block header — same structure as buildTransitions
+  const headerHTML =
+    '<div class="city-block-header">' +
+      '<h3 class="city-block-title">Accommodations<span class="city-block-subtitle">where you sleep</span></h3>' +
+      '<div class="city-block-actions">' +
+        '<button class="btn-secondary" onclick="openBatchScoreModalForAccoms(\''+capturedId+'\')" title="Score all properties in one batched API call">⚡ Score all</button>' +
+        '<button class="btn-secondary" onclick="addAccommodation(\''+capturedId+'\')">+ Add</button>' +
+      '</div>' +
+    '</div>';
+  wrap.insertAdjacentHTML('beforeend', headerHTML);
 
   const list = document.createElement('div');
   list.className = 'accom-list';
-  // Sort accommodations by checkIn date (earliest first). Stable secondary sort by name so
-  // entries without dates don't jump around. Sort a shallow copy — never mutate state.cities
-  // order — snapshots / restore depend on stable serialization.
+  // Sort accommodations by checkIn date (earliest first). Stable secondary sort by name.
+  // Sort a shallow copy so we never mutate state.cities order — snapshots / restore
+  // depend on stable serialization.
   const sortedAccoms = (city.accommodations || []).slice().sort((a, b) => {
     const ai = a.checkIn || '';
     const bi = b.checkIn || '';
     if (ai && bi) return ai.localeCompare(bi);
-    if (ai && !bi) return -1;  // dated entries before undated
+    if (ai && !bi) return -1;
     if (!ai && bi) return 1;
     return (a.name || '').localeCompare(b.name || '');
   });
@@ -5410,10 +5437,19 @@ function deleteTransition(id) {
 // Build the transitions section inside a city's expanded body.
 function buildTransitions(city) {
   const wrap = document.createElement('div');
-  wrap.className = 'transit-section';
+  wrap.className = 'city-block transit-section';
   wrap.dataset.cityTransitId = city.id;
   const cid = city.id;
-  wrap.innerHTML = '<h3>Outbound travel <span style="font-weight:400;color:var(--text-3);font-size:12px;font-family:JetBrains Mono,monospace;letter-spacing:0.04em;margin-left:6px">flights, trains, ferries…</span><div style="display:inline-flex;gap:8px;margin-left:auto;align-items:center"><button class="btn-secondary" onclick="addTransition(\''+cid+'\')">+ Add leg</button></div></h3>';
+
+  // Standardized block header — mirrors buildAccommodations structure
+  const headerHTML =
+    '<div class="city-block-header">' +
+      '<h3 class="city-block-title">Outbound travel<span class="city-block-subtitle">flights, trains, ferries…</span></h3>' +
+      '<div class="city-block-actions">' +
+        '<button class="btn-secondary" onclick="addTransition(\''+cid+'\')">+ Add leg</button>' +
+      '</div>' +
+    '</div>';
+  wrap.insertAdjacentHTML('beforeend', headerHTML);
 
   const list = document.createElement('div');
   list.className = 'transit-list';
