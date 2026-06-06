@@ -260,6 +260,7 @@
   .cost-sub.neutral, .cost-sub.on { color: var(--text-3); }
   .cost-sub.over { color: var(--accent); }
   .cost-sub.under { color: var(--green); }
+  .cost-sub.transit-sub { color: var(--text-3); font-style: italic; }
   .city-chev {
     color: var(--text-3); font-size: 16px; transition: transform 0.2s;
   }
@@ -447,6 +448,11 @@
   .transit-icon { font-size: 18px; line-height: 1; }
   .transit-summary-text { font-weight: 500; color: var(--text); letter-spacing: 0.02em; }
   .transit-summary-date { color: var(--text-3); margin-left: auto; }
+  .transit-summary-cost {
+    color: var(--text-2); font-weight: 500;
+    padding: 2px 8px; background: var(--bg-soft); border-radius: 4px;
+    font-size: 11px; letter-spacing: 0.02em;
+  }
   .transit-fields {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
   }
@@ -2407,8 +2413,11 @@ function renderCounters() {
   `;
   container.appendChild(schCard);
 
-  // Total cost (respecting filter) — use max of estimate vs booked accommodations per city
-  let totalCost = 0;
+  // Total cost (respecting filter) — use max of estimate vs booked accommodations per city,
+  // PLUS booked transit costs attributed to each in-scope city. Transit is a real travel
+  // expense and should count toward the total trip-cost number.
+  let totalAccomCost = 0;
+  let totalTransitCost = 0;
   inScopeCities.forEach(c => {
     const estCost = Number(c.estimatedCost) || 0;
     let bookedCost = 0;
@@ -2417,8 +2426,10 @@ function renderCounters() {
         if (a.cost && a.status === 'booked') bookedCost += Number(a.cost) || 0;
       });
     }
-    totalCost += Math.max(estCost, bookedCost);
+    totalAccomCost += Math.max(estCost, bookedCost);
+    totalTransitCost += cityTransitCost(c);
   });
+  const totalCost = totalAccomCost + totalTransitCost;
   // Compute span in months from earliest checkIn to latest checkOut among in-scope cities
   let spanMonths = 0;
   const dated = inScopeCities.filter(c => c.checkIn && c.checkOut);
@@ -2428,7 +2439,9 @@ function renderCounters() {
     const days = Math.max(1, Math.round((parseDate(lastOut) - parseDate(firstIn)) / 86400000));
     spanMonths = days / 30.44;
   }
-  const avgPerMonth = spanMonths > 0 ? totalCost / spanMonths : 0;
+  // Per-month average is based on STAYS only (not transit) — transit is one-time spend,
+  // not a recurring cost, so including it in a monthly average would be misleading.
+  const avgPerMonth = spanMonths > 0 ? totalAccomCost / spanMonths : 0;
   const target = state.budgetMonthlyTarget || 0;
   let varianceLine = '';
   if (target > 0 && spanMonths > 0.5) {
@@ -2448,11 +2461,15 @@ function renderCounters() {
   }
   const costCard = document.createElement('div');
   costCard.className = 'counter-card';
+  // Build the breakdown line: stays + transit components shown separately so the user
+  // can see what's driving the total. Stays-only goes into the monthly variance below.
+  const breakdownParts = [fmtCurrency(totalAccomCost, 'USD') + ' stays'];
+  if (totalTransitCost > 0) breakdownParts.push(fmtCurrency(totalTransitCost, 'USD') + ' transit');
   costCard.innerHTML = `
     <div class="counter-label">Estimated total cost${filterLabel}</div>
     <div class="counter-value">${fmtCurrency(totalCost,'USD')}</div>
-    <div class="counter-sub">Sum of city estimates + booked accommodations</div>
-    ${spanMonths > 0.5 ? `<div class="counter-sub" style="font-size:11px;margin-top:2px">Avg ${fmtCurrency(Math.round(avgPerMonth),'USD')}/month across ${spanMonths.toFixed(1)} months</div>` : ''}
+    <div class="counter-sub">${breakdownParts.join(' + ')}</div>
+    ${spanMonths > 0.5 ? `<div class="counter-sub" style="font-size:11px;margin-top:2px">Stays avg ${fmtCurrency(Math.round(avgPerMonth),'USD')}/month across ${spanMonths.toFixed(1)} months</div>` : ''}
     ${varianceLine}
   `;
   container.appendChild(costCard);
@@ -2667,7 +2684,9 @@ function renderStatusFilters() {
   });
 }
 
-// Show cost totals broken down by status
+// Show cost totals broken down by status. Includes per-status accommodations PLUS
+// the global booked-transit subtotal (transit doesn't carry a city status — it's
+// always "booked" or not, so it lives alongside the city-status buckets).
 function renderStatusCostRow() {
   const container = document.getElementById('status-cost-row');
   if (!container) return;
@@ -2684,8 +2703,18 @@ function renderStatusCostRow() {
     else if (s === 'shortlisted') costs.shortlisted += cityCost;
     else costs.tentative += cityCost;
   });
+  // Booked transit total — only count legs whose city isn't in the past
+  const transitTotal = (state.transitions || [])
+    .filter(t => {
+      if (t.status !== 'booked') return false;
+      const c = state.cities.find(c => c.id === t.cityId);
+      if (!c || !c.checkOut) return true;  // city without dates — count anyway
+      return c.checkOut >= todayStr;  // skip past cities
+    })
+    .reduce((sum, t) => sum + (Number(t.cost) || 0), 0);
   const parts = [];
-  parts.push(`<span style="color:var(--green)">Booked: <strong>${fmtCurrency(Math.round(costs.booked),'USD')}</strong></span>`);
+  parts.push(`<span style="color:var(--green)">Booked stays: <strong>${fmtCurrency(Math.round(costs.booked),'USD')}</strong></span>`);
+  if (transitTotal > 0) parts.push(`<span style="color:var(--green)">Booked transit: <strong>${fmtCurrency(Math.round(transitTotal),'USD')}</strong></span>`);
   if (costs.shortlisted > 0) parts.push(`<span style="color:var(--blue)">Shortlisted: <strong>${fmtCurrency(Math.round(costs.shortlisted),'USD')}</strong></span>`);
   parts.push(`<span style="color:var(--amber)">Tentative: <strong>${fmtCurrency(Math.round(costs.tentative),'USD')}</strong></span>`);
   container.innerHTML = parts.join('');
@@ -2847,7 +2876,12 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
     <div class="city-stats">
       <div class="stat"><span class="num">${nights}</span> nights</div>
       <div class="stat" title="Properties booked vs total candidates"><span class="num">${accomBooked}/${accomCount}</span> stays</div>
-      <div class="stat cost-stat"><span class="num">${fmtCurrency(cityCost,'USD')}</span>${buildPerMonthSub(cityCost, nights)}</div>
+      <div class="stat cost-stat"><span class="num">${fmtCurrency(cityCost,'USD')}</span>${(() => {
+        const transitCost = cityTransitCost(city);
+        return transitCost > 0
+          ? `<div class="cost-sub transit-sub" title="Booked transit costs for legs departing this city">+ ${fmtCurrency(transitCost, 'USD')} transit</div>`
+          : '';
+      })()}${buildPerMonthSub(cityCost, nights)}</div>
     </div>
     <div class="city-chev">▶</div>
   `;
@@ -5355,6 +5389,23 @@ function transitionsForCity(cityId) {
   return (state.transitions || []).filter(t => t.cityId === cityId);
 }
 
+// Sum of booked transit-leg costs attributed to this city. Used in city headers,
+// rollups, and budget comparisons. Only counts booked legs — tentative/shortlisted
+// transitions don't represent committed spend.
+function cityTransitCost(city) {
+  if (!city || !city.id) return 0;
+  return (state.transitions || [])
+    .filter(t => t.cityId === city.id && t.status === 'booked')
+    .reduce((sum, t) => sum + (Number(t.cost) || 0), 0);
+}
+
+// Global sum of all booked transit costs across every city. Used in the global rollup.
+function totalBookedTransitCost() {
+  return (state.transitions || [])
+    .filter(t => t.status === 'booked')
+    .reduce((sum, t) => sum + (Number(t.cost) || 0), 0);
+}
+
 // Compact transit card for the itinerary list view (between city cards).
 // Click → expand the source city to reveal the editor for this leg.
 function buildAdminTransitMini(t) {
@@ -5479,10 +5530,19 @@ function buildTransitions(city) {
   wrap.dataset.cityTransitId = city.id;
   const cid = city.id;
 
+  // Build subtitle: list of mode descriptors + booked subtotal when > 0.
+  // Mirrors the accom-section pattern — block-level cost visibility at a glance.
+  const bookedTransitTotal = cityTransitCost(city);
+  const subtitleParts = ['flights, trains, ferries…'];
+  if (bookedTransitTotal > 0) {
+    subtitleParts.push(fmtCurrency(bookedTransitTotal, 'USD') + ' booked');
+  }
+  const subtitle = subtitleParts.join(' · ');
+
   // Standardized block header — mirrors buildAccommodations structure
   const headerHTML =
     '<div class="city-block-header">' +
-      '<h3 class="city-block-title">Outbound travel<span class="city-block-subtitle">flights, trains, ferries…</span></h3>' +
+      '<h3 class="city-block-title">Outbound travel<span class="city-block-subtitle">' + escapeHTML(subtitle) + '</span></h3>' +
       '<div class="city-block-actions">' +
         '<button class="btn-secondary" onclick="addTransition(\''+cid+'\')">+ Add leg</button>' +
       '</div>' +
@@ -5526,6 +5586,7 @@ function buildTransitionRow(city, t) {
     '<span class="transit-icon">' + icon + '</span>' +
     '<span class="transit-summary-text">' + escapeHTML(summaryLine) + ' → ' + escapeHTML(t.toCity || '?') + '</span>' +
     '<span class="transit-summary-date">' + dateBit + '</span>' +
+    (t.cost && Number(t.cost) > 0 ? '<span class="transit-summary-cost">' + escapeHTML(fmtCurrency(Number(t.cost), t.currency || 'USD')) + '</span>' : '') +
     '<span class="transit-chev" style="margin-left:8px;color:var(--text-3);font-size:11px;transition:transform 0.2s;transform:rotate(' + (isOpen ? '0' : '-90') + 'deg)">▾</span>';
 
   // Body wraps the editor + notes + delete — toggled by clicking the summary
