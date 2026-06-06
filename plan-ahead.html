@@ -152,6 +152,37 @@
   .counter-breakdown .item .name { color: var(--text-2); }
   .counter-breakdown .item .num { font-family: 'JetBrains Mono', monospace; color: var(--text-3); font-size: 11px; }
 
+  /* Budget projection card — three rolling-window rows aligned in columns */
+  .budget-projection-card { min-width: 280px; }
+  .budget-period-rows {
+    display: flex; flex-direction: column; gap: 8px; margin-top: 4px;
+  }
+  .budget-period-row {
+    display: grid; grid-template-columns: minmax(110px, 1fr) auto auto;
+    align-items: baseline; gap: 12px;
+    padding: 4px 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  }
+  .budget-period-row + .budget-period-row {
+    border-top: 1px dashed var(--border-light); padding-top: 8px;
+  }
+  .budget-period-label {
+    color: var(--text-2); letter-spacing: 0.02em;
+  }
+  .budget-period-amounts {
+    text-align: right; white-space: nowrap;
+  }
+  .budget-period-projected {
+    color: var(--text); font-weight: 500;
+  }
+  .budget-period-target {
+    color: var(--text-3); font-size: 11px; margin-left: 4px;
+  }
+  .budget-period-variance {
+    text-align: right; font-size: 11px; font-weight: 500; white-space: nowrap;
+    letter-spacing: 0.04em;
+  }
+
   /* NOW & NEXT */
   .now-card {
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
@@ -2473,6 +2504,56 @@ function renderCounters() {
     ${varianceLine}
   `;
   container.appendChild(costCard);
+
+  // Budget projection — rolling windows of 30 / 90 / 365 days from today, with
+  // variance against derived targets (monthly target × N/30). Only renders when
+  // a monthly budget is set, since variance is the whole point of this view.
+  // Filter does NOT apply here — this is always "from today forward".
+  if (target > 0) {
+    const today = todayISO();
+    const periods = [
+      { label: 'Next 30 days',  days: 30,  windowEnd: addDaysISO(today, 30) },
+      { label: 'Next 90 days',  days: 90,  windowEnd: addDaysISO(today, 90) },
+      { label: 'Next 12 months', days: 365, windowEnd: addDaysISO(today, 365) },
+    ];
+    const rows = periods.map(p => {
+      const periodTarget = target * (p.days / 30);
+      const window = costInWindow(today, p.windowEnd);
+      const projected = window.total;
+      const delta = projected - periodTarget;
+      const pctDelta = periodTarget > 0 ? (delta / periodTarget * 100) : 0;
+      // "On track" tolerance: ±10% of target. Travel costs are lumpy enough that
+      // strict comparison creates false alarms — 10% is a reasonable buffer.
+      const isOver = delta > periodTarget * 0.10;
+      const isUnder = delta < -periodTarget * 0.10;
+      const status = isOver ? 'over' : (isUnder ? 'under' : 'on');
+      const color = isOver ? 'var(--accent)' : (isUnder ? 'var(--green)' : 'var(--text-2)');
+      const icon = isOver ? '⚠' : (isUnder ? '✓' : '·');
+      const deltaLabel = delta >= 0
+        ? '+' + fmtCurrency(Math.round(delta), 'USD')
+        : '−' + fmtCurrency(Math.round(-delta), 'USD');
+      return `
+        <div class="budget-period-row">
+          <span class="budget-period-label">${p.label}</span>
+          <div class="budget-period-amounts">
+            <span class="budget-period-projected">${fmtCurrency(Math.round(projected), 'USD')}</span>
+            <span class="budget-period-target">/ ${fmtCurrency(Math.round(periodTarget), 'USD')}</span>
+          </div>
+          <span class="budget-period-variance" style="color:${color}">${icon} ${deltaLabel}</span>
+        </div>
+      `;
+    }).join('');
+    const budgetCard = document.createElement('div');
+    budgetCard.className = 'counter-card budget-projection-card';
+    budgetCard.innerHTML = `
+      <div class="counter-label">Budget projection (from today)</div>
+      <div class="budget-period-rows">${rows}</div>
+      <div class="counter-sub" style="font-size:10px;margin-top:6px;color:var(--text-3)">
+        Targets derived from monthly target × N/30. Stays prorated by overlap nights; transits attributed to departure date.
+      </div>
+    `;
+    container.appendChild(budgetCard);
+  }
 
   // Days by country (filtered)
   const countryMap = countryDayMap(range);
@@ -5404,6 +5485,51 @@ function totalBookedTransitCost() {
   return (state.transitions || [])
     .filter(t => t.status === 'booked')
     .reduce((sum, t) => sum + (Number(t.cost) || 0), 0);
+}
+
+// Compute booked spend that falls WITHIN a date window [startISO, endISO].
+// - Stays are prorated by overlap nights (a $3000/30-night stay spanning the
+//   boundary contributes proportionally to each side).
+// - Transits are attributed entirely to the calendar date of their departureDate.
+// Returns { stayCost, transitCost, total }.
+function costInWindow(startISO, endISO) {
+  const startMS = new Date(startISO + 'T00:00:00').getTime();
+  const endMS = new Date(endISO + 'T23:59:59').getTime();
+  let stayCost = 0;
+  let transitCost = 0;
+  (state.cities || []).forEach(city => {
+    (city.accommodations || []).forEach(a => {
+      if (a.status !== 'booked' || !a.checkIn || !a.checkOut || !a.cost) return;
+      const accStartMS = new Date(a.checkIn + 'T00:00:00').getTime();
+      const accEndMS = new Date(a.checkOut + 'T00:00:00').getTime();
+      if (accEndMS <= startMS || accStartMS >= endMS) return; // no overlap
+      const overlapStart = Math.max(accStartMS, startMS);
+      const overlapEnd = Math.min(accEndMS, endMS);
+      const overlapNights = Math.max(0, (overlapEnd - overlapStart) / 86400000);
+      const totalNights = (accEndMS - accStartMS) / 86400000;
+      if (totalNights > 0) {
+        stayCost += (Number(a.cost) || 0) * (overlapNights / totalNights);
+      }
+    });
+  });
+  (state.transitions || []).forEach(t => {
+    if (t.status !== 'booked' || !t.departureDate || !t.cost) return;
+    const depMS = new Date(t.departureDate + 'T12:00:00').getTime();
+    if (depMS >= startMS && depMS <= endMS) {
+      transitCost += Number(t.cost) || 0;
+    }
+  });
+  return { stayCost, transitCost, total: stayCost + transitCost };
+}
+
+// Return ISO date N days after the given ISO date, using local-date arithmetic.
+function addDaysISO(iso, days) {
+  const d = new Date(iso + 'T12:00:00'); // noon avoids DST edge cases
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
 }
 
 // Compact transit card for the itinerary list view (between city cards).
