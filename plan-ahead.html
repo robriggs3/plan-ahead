@@ -1835,8 +1835,16 @@ function showSaved() {
 // ==================== HELPERS ====================
 
 function todayISO() {
+  // Return TODAY in the user's LOCAL timezone, not UTC. Critical for global travelers:
+  // when local evening rolls into the next UTC day, toISOString() would return "tomorrow",
+  // making cities-by-date logic decide you're already at your next destination.
+  // (Reproduced bug: Atlanta resident at 9pm local saw their Jun 6 Miami booking flagged as
+  // "now" because UTC had already rolled over to Jun 6.)
   const d = new Date();
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
 }
 
 function parseDate(s) {
@@ -2169,12 +2177,42 @@ function populateCountries() {
 
 function updateHero() {
   const now = new Date();
-  document.getElementById('hero-date').textContent = now.toLocaleDateString('en-US', {
+  const dateStr = now.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
   });
+  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  // Timezone abbreviation (EDT, CET, etc.). Fall back to UTC±N offset if not available.
+  let tzStr = '';
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' }).formatToParts(now);
+    const tz = parts.find(p => p.type === 'timeZoneName');
+    tzStr = tz ? tz.value : '';
+  } catch (e) {
+    const offsetMin = -now.getTimezoneOffset();
+    const offsetH = offsetMin / 60;
+    tzStr = 'UTC' + (offsetH >= 0 ? '+' : '') + offsetH;
+  }
+  // Date on top, current local time + timezone underneath. The time helps you sanity-check
+  // what "now" the app is comparing dates against — especially after a timezone shift.
+  document.getElementById('hero-date').innerHTML =
+    escapeHTML(dateStr) +
+    '<div style="font-size:11px;color:var(--text-3);font-family:JetBrains Mono,monospace;letter-spacing:0.04em;margin-top:2px;text-transform:uppercase">' +
+    escapeHTML(timeStr) + ' · ' + escapeHTML(tzStr) +
+    '</div>';
   document.getElementById('hero-last').textContent = 'LAST TOUCHED ' + (state.lastSession
     ? new Date(state.lastSession).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' })
     : '—');
+}
+
+// Tick the hero every 60 seconds so the displayed time stays current without a manual refresh.
+// Set once at module load — see INIT block at bottom of script.
+let _heroTickHandle = null;
+function startHeroTick() {
+  if (_heroTickHandle) return;
+  _heroTickHandle = setInterval(() => {
+    // Only update if the element exists (could be removed during deep re-renders)
+    if (document.getElementById('hero-date')) updateHero();
+  }, 60000);
 }
 
 // ==================== NOW & NEXT ====================
@@ -7404,6 +7442,7 @@ linkDatePair(addInEl, addOutEl);
 populateCountries();
 setupProfile();
 renderAll();
+startHeroTick();  // keeps the displayed time live (refreshes every 60s)
 </script>
 
 </body>
