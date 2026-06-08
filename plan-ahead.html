@@ -124,11 +124,33 @@
 
   /* COUNTERS BAR */
   .counters {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;
+    display: grid; grid-template-columns: 1fr; gap: 16px;
+    align-items: start;
+  }
+  /* On wider viewports, split into two columns: Time/Compliance | Cost/Budget */
+  @media (min-width: 880px) {
+    .counters { grid-template-columns: 1fr 1fr; }
   }
   .counter-card {
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
     padding: 16px 18px; box-shadow: var(--shadow-sm);
+  }
+  /* Grouped card: contains 2-3 related sub-sections separated by subtle dividers */
+  .counter-group-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px; box-shadow: var(--shadow-sm);
+  }
+  .counter-group-title {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--text-3); text-transform: uppercase; letter-spacing: 0.12em;
+    margin-bottom: 14px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .counter-section {
+    margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--border-light);
+  }
+  .counter-section:first-of-type {
+    margin-top: 0; padding-top: 0; border-top: none;
   }
   .counter-label {
     font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
@@ -181,6 +203,10 @@
   .budget-period-variance {
     text-align: right; font-size: 11px; font-weight: 500; white-space: nowrap;
     letter-spacing: 0.04em;
+  }
+  .budget-period-coverage {
+    font-size: 10px; color: var(--text-3); font-style: italic;
+    margin-left: 4px; font-family: 'JetBrains Mono', monospace;
   }
 
   /* NOW & NEXT */
@@ -2418,35 +2444,65 @@ function renderCounters() {
 
   // Use the same timeline filter as the map. When 'all', use everything.
   const range = getMapFilterRange();
-  const inRange = c => cityInRange(c, range) || !range;
-  // For accurate "in scope" set, include cities without dates only when filter is 'all'
   const inScopeCities = range
     ? state.cities.filter(c => c.checkIn && c.checkOut && cityInRange(c, range))
     : state.cities;
   const filterLabel = state.mapFilter && state.mapFilter !== 'all'
     ? ` (filtered: ${getFilterLabel()})`
     : '';
-
-  // Schengen now
   const todayStr = todayISO();
+
+  // ============== Section content builders ==============
+  // Each returns an HTML string for one section inside a grouped card.
+
+  // ---- Schengen 90/180 ----
   const schNow = schengenDaysUsedAt(todayStr);
   const peak = peakSchengenAhead();
-
-  const schCard = document.createElement('div');
-  schCard.className = 'counter-card';
   let schClass = 'ok';
   if (schNow >= 75 || peak.days >= 85) schClass = 'alert';
   else if (schNow >= 60 || peak.days >= 70) schClass = 'warn';
-  schCard.innerHTML = `
-    <div class="counter-label">Schengen 90/180 (today)</div>
-    <div class="counter-value ${schClass}">${schNow} <span style="font-size:18px;color:var(--text-3)">/ 90</span></div>
-    <div class="counter-sub">${90 - schNow} days remaining today${peak.date ? ` · peak ahead: ${peak.days} on ${fmtDateShort(peak.date)}` : ''}</div>
+  const schSection = `
+    <div class="counter-section">
+      <div class="counter-label">Schengen 90/180 (today)</div>
+      <div class="counter-value ${schClass}">${schNow} <span style="font-size:18px;color:var(--text-3)">/ 90</span></div>
+      <div class="counter-sub">${90 - schNow} days remaining today${peak.date ? ` · peak ahead: ${peak.days} on ${fmtDateShort(peak.date)}` : ''}</div>
+    </div>
   `;
-  container.appendChild(schCard);
 
-  // Total cost (respecting filter) — use max of estimate vs booked accommodations per city,
-  // PLUS booked transit costs attributed to each in-scope city. Transit is a real travel
-  // expense and should count toward the total trip-cost number.
+  // ---- US days (FEIE) ----
+  const stateMap = stateDayMap(range);
+  const topStates = Object.entries(stateMap).sort((a,b) => b[1] - a[1]).slice(0, 8);
+  const usTotal = Object.values(stateMap).reduce((a,b)=>a+b,0);
+  let usClass = 'ok';
+  if (usTotal > 32) usClass = 'alert';
+  else if (usTotal > 25) usClass = 'warn';
+  const usSection = `
+    <div class="counter-section">
+      <div class="counter-label">US days (rolling, by state)${filterLabel}</div>
+      <div class="counter-value ${usClass}">${usTotal} <span style="font-size:18px;color:var(--text-3)">/ 35*</span></div>
+      <div class="counter-sub">* FEIE physical presence: max 35 US days per rolling 12 months</div>
+      <div class="counter-breakdown">
+        ${topStates.map(([k,v]) => `<div class="item"><span class="name">${escapeHTML(k)}</span><span class="num">${v}d</span></div>`).join('')}
+      </div>
+    </div>
+  `;
+
+  // ---- Days by country ----
+  const countryMap = countryDayMap(range);
+  const topCountries = Object.entries(countryMap).sort((a,b) => b[1] - a[1]).slice(0, 6);
+  const countriesTotal = Object.values(countryMap).reduce((a,b)=>a+b,0);
+  const countrySection = `
+    <div class="counter-section">
+      <div class="counter-label">Days by country${filterLabel}</div>
+      <div class="counter-value">${Object.keys(countryMap).length}</div>
+      <div class="counter-sub">${countriesTotal} planned nights total</div>
+      <div class="counter-breakdown">
+        ${topCountries.map(([k,v]) => `<div class="item"><span class="name">${escapeHTML(k)}</span><span class="num">${v}d</span></div>`).join('')}
+      </div>
+    </div>
+  `;
+
+  // ---- Estimated total cost ----
   let totalAccomCost = 0;
   let totalTransitCost = 0;
   inScopeCities.forEach(c => {
@@ -2461,25 +2517,24 @@ function renderCounters() {
     totalTransitCost += cityTransitCost(c);
   });
   const totalCost = totalAccomCost + totalTransitCost;
-  // Compute span in months from earliest checkIn to latest checkOut among in-scope cities
   let spanMonths = 0;
+  let lastPlannedDate = null;
   const dated = inScopeCities.filter(c => c.checkIn && c.checkOut);
   if (dated.length > 0) {
     const firstIn = dated.reduce((min, c) => c.checkIn < min ? c.checkIn : min, dated[0].checkIn);
     const lastOut = dated.reduce((max, c) => c.checkOut > max ? c.checkOut : max, dated[0].checkOut);
+    lastPlannedDate = lastOut;
     const days = Math.max(1, Math.round((parseDate(lastOut) - parseDate(firstIn)) / 86400000));
     spanMonths = days / 30.44;
   }
-  // Per-month average is based on STAYS only (not transit) — transit is one-time spend,
-  // not a recurring cost, so including it in a monthly average would be misleading.
   const avgPerMonth = spanMonths > 0 ? totalAccomCost / spanMonths : 0;
   const target = state.budgetMonthlyTarget || 0;
   let varianceLine = '';
   if (target > 0 && spanMonths > 0.5) {
     const delta = avgPerMonth - target;
     const pctDelta = target > 0 ? (delta / target * 100) : 0;
-    const onTrack = delta <= target * 0.05; // within 5% counts as on-track
     const isOver = delta > target * 0.05;
+    const onTrack = delta <= target * 0.05;
     const cls = isOver ? 'alert' : (onTrack ? 'ok' : 'warn');
     const color = cls === 'alert' ? 'var(--accent)' : (cls === 'ok' ? 'var(--green)' : 'var(--amber)');
     const icon = isOver ? '⚠' : '✓';
@@ -2490,43 +2545,46 @@ function renderCounters() {
   } else if (target === 0 && spanMonths > 0.5) {
     varianceLine = `<div class="counter-sub" style="font-size:10px;margin-top:2px;color:var(--text-3)">Set a monthly target in Settings to track variance.</div>`;
   }
-  const costCard = document.createElement('div');
-  costCard.className = 'counter-card';
-  // Build the breakdown line: stays + transit components shown separately so the user
-  // can see what's driving the total. Stays-only goes into the monthly variance below.
   const breakdownParts = [fmtCurrency(totalAccomCost, 'USD') + ' stays'];
   if (totalTransitCost > 0) breakdownParts.push(fmtCurrency(totalTransitCost, 'USD') + ' transit');
-  costCard.innerHTML = `
-    <div class="counter-label">Estimated total cost${filterLabel}</div>
-    <div class="counter-value">${fmtCurrency(totalCost,'USD')}</div>
-    <div class="counter-sub">${breakdownParts.join(' + ')}</div>
-    ${spanMonths > 0.5 ? `<div class="counter-sub" style="font-size:11px;margin-top:2px">Stays avg ${fmtCurrency(Math.round(avgPerMonth),'USD')}/month across ${spanMonths.toFixed(1)} months</div>` : ''}
-    ${varianceLine}
+  const costSection = `
+    <div class="counter-section">
+      <div class="counter-label">Estimated total cost${filterLabel}</div>
+      <div class="counter-value">${fmtCurrency(totalCost,'USD')}</div>
+      <div class="counter-sub">${breakdownParts.join(' + ')}</div>
+      ${spanMonths > 0.5 ? `<div class="counter-sub" style="font-size:11px;margin-top:2px">Stays avg ${fmtCurrency(Math.round(avgPerMonth),'USD')}/month across ${spanMonths.toFixed(1)} months</div>` : ''}
+      ${varianceLine}
+    </div>
   `;
-  container.appendChild(costCard);
 
-  // Budget projection — rolling windows of 30 / 90 / 365 days from today, with
-  // variance against derived targets (monthly target × N/30). Only renders when
-  // a monthly budget is set, since variance is the whole point of this view.
-  // Filter does NOT apply here — this is always "from today forward".
+  // ---- Budget projection (rolling 30/90/365 from today) ----
+  let budgetSection = '';
   if (target > 0) {
     const today = todayISO();
     const periods = [
-      { label: 'Next 30 days',  days: 30,  windowEnd: addDaysISO(today, 30) },
-      { label: 'Next 90 days',  days: 90,  windowEnd: addDaysISO(today, 90) },
-      { label: 'Next 12 months', days: 365, windowEnd: addDaysISO(today, 365) },
+      { label: 'Next 30 days',  days: 30 },
+      { label: 'Next 90 days',  days: 90 },
+      { label: 'Next 12 months', days: 365 },
     ];
+    // Determine plan-coverage end-date — used to flag rows where the period extends
+    // beyond planned data (variance comparison would be misleading otherwise).
     const rows = periods.map(p => {
+      const windowEnd = addDaysISO(today, p.days);
       const periodTarget = target * (p.days / 30);
-      const window = costInWindow(today, p.windowEnd);
+      const window = costInWindow(today, windowEnd);
       const projected = window.total;
+      // Coverage: how much of this period is covered by planned data?
+      let coverageNote = '';
+      if (lastPlannedDate && lastPlannedDate < windowEnd) {
+        const plannedDays = Math.max(0, (parseDate(lastPlannedDate) - parseDate(today)) / 86400000);
+        const coverageRatio = Math.min(1, plannedDays / p.days);
+        if (coverageRatio < 0.95) {
+          coverageNote = ` <span class="budget-period-coverage" title="Only ${Math.round(coverageRatio*100)}% of this window has planned travel. Variance is comparing partial data to a full-period target.">(${Math.round(coverageRatio*100)}% planned)</span>`;
+        }
+      }
       const delta = projected - periodTarget;
-      const pctDelta = periodTarget > 0 ? (delta / periodTarget * 100) : 0;
-      // "On track" tolerance: ±10% of target. Travel costs are lumpy enough that
-      // strict comparison creates false alarms — 10% is a reasonable buffer.
       const isOver = delta > periodTarget * 0.10;
       const isUnder = delta < -periodTarget * 0.10;
-      const status = isOver ? 'over' : (isUnder ? 'under' : 'on');
       const color = isOver ? 'var(--accent)' : (isUnder ? 'var(--green)' : 'var(--text-2)');
       const icon = isOver ? '⚠' : (isUnder ? '✓' : '·');
       const deltaLabel = delta >= 0
@@ -2534,7 +2592,7 @@ function renderCounters() {
         : '−' + fmtCurrency(Math.round(-delta), 'USD');
       return `
         <div class="budget-period-row">
-          <span class="budget-period-label">${p.label}</span>
+          <span class="budget-period-label">${p.label}${coverageNote}</span>
           <div class="budget-period-amounts">
             <span class="budget-period-projected">${fmtCurrency(Math.round(projected), 'USD')}</span>
             <span class="budget-period-target">/ ${fmtCurrency(Math.round(periodTarget), 'USD')}</span>
@@ -2543,52 +2601,37 @@ function renderCounters() {
         </div>
       `;
     }).join('');
-    const budgetCard = document.createElement('div');
-    budgetCard.className = 'counter-card budget-projection-card';
-    budgetCard.innerHTML = `
-      <div class="counter-label">Budget projection (from today)</div>
-      <div class="budget-period-rows">${rows}</div>
-      <div class="counter-sub" style="font-size:10px;margin-top:6px;color:var(--text-3)">
-        Targets derived from monthly target × N/30. Stays prorated by overlap nights; transits attributed to departure date.
+    budgetSection = `
+      <div class="counter-section">
+        <div class="counter-label">Budget projection (from today)</div>
+        <div class="budget-period-rows">${rows}</div>
+        <div class="counter-sub" style="font-size:10px;margin-top:6px;color:var(--text-3)">
+          Targets derived from monthly × N/30. Stays prorated by overlap; transits at departure date.
+        </div>
       </div>
     `;
-    container.appendChild(budgetCard);
   }
 
-  // Days by country (filtered)
-  const countryMap = countryDayMap(range);
-  const topCountries = Object.entries(countryMap).sort((a,b) => b[1] - a[1]).slice(0, 6);
-  const countriesTotal = Object.values(countryMap).reduce((a,b)=>a+b,0);
-  const countryCard = document.createElement('div');
-  countryCard.className = 'counter-card';
-  countryCard.innerHTML = `
-    <div class="counter-label">Days by country${filterLabel}</div>
-    <div class="counter-value">${Object.keys(countryMap).length}</div>
-    <div class="counter-sub">${countriesTotal} planned nights total</div>
-    <div class="counter-breakdown">
-      ${topCountries.map(([k,v]) => `<div class="item"><span class="name">${escapeHTML(k)}</span><span class="num">${v}d</span></div>`).join('')}
-    </div>
-  `;
-  container.appendChild(countryCard);
+  // ============== Assemble two grouped cards ==============
 
-  // US days by state (filtered)
-  const stateMap = stateDayMap(range);
-  const topStates = Object.entries(stateMap).sort((a,b) => b[1] - a[1]).slice(0, 8);
-  const usTotal = Object.values(stateMap).reduce((a,b)=>a+b,0);
-  const stateCard = document.createElement('div');
-  stateCard.className = 'counter-card';
-  let usClass = 'ok';
-  if (usTotal > 32) usClass = 'alert';
-  else if (usTotal > 25) usClass = 'warn';
-  stateCard.innerHTML = `
-    <div class="counter-label">US days (rolling, by state)${filterLabel}</div>
-    <div class="counter-value ${usClass}">${usTotal} <span style="font-size:18px;color:var(--text-3)">/ 35*</span></div>
-    <div class="counter-sub">* FEIE physical presence: max 35 US days per rolling 12 months</div>
-    <div class="counter-breakdown">
-      ${topStates.map(([k,v]) => `<div class="item"><span class="name">${escapeHTML(k)}</span><span class="num">${v}d</span></div>`).join('')}
-    </div>
+  const timeGroup = document.createElement('div');
+  timeGroup.className = 'counter-group-card';
+  timeGroup.innerHTML = `
+    <div class="counter-group-title">Time &amp; compliance</div>
+    ${schSection}
+    ${usSection}
+    ${countrySection}
   `;
-  container.appendChild(stateCard);
+  container.appendChild(timeGroup);
+
+  const budgetGroup = document.createElement('div');
+  budgetGroup.className = 'counter-group-card';
+  budgetGroup.innerHTML = `
+    <div class="counter-group-title">Cost &amp; budget</div>
+    ${costSection}
+    ${budgetSection}
+  `;
+  container.appendChild(budgetGroup);
 }
 
 // ==================== ITINERARY ====================
