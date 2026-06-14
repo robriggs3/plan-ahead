@@ -1860,6 +1860,7 @@ function restoreSnapshot(id) {
   takeManualSnapshot('Before restoring "' + snap.name + '"');
   state = Object.assign(defaultState(), snap.data);
   openCityIds = new Set();
+  recomputeGlobalScores(); // restored state may differ from cached scores
   saveState();
   renderAll();
   toast(`Restored "${snap.name}". Previous data kept as safety snapshot.`, 'ok');
@@ -2060,6 +2061,7 @@ function uncoveredNights(city) {
 function countryDayMap(range) {
   const map = {};
   state.cities.forEach(c => {
+    if (c.status === 'eliminated') return;
     if (!c.country || !c.checkIn || !c.checkOut) return;
     if (range && !cityInRange(c, range)) return;
     // If range is set, count overlap with range, not full city stay
@@ -2082,6 +2084,7 @@ function countryDayMap(range) {
 function stateDayMap(range) {
   const map = {};
   state.cities.forEach(c => {
+    if (c.status === 'eliminated') return;
     if (!isUS(c.country) || !c.state || !c.checkIn || !c.checkOut) return;
     if (range && !cityInRange(c, range)) return;
     let nights = cityNights(c);
@@ -2120,6 +2123,7 @@ function schengenDaysUsedAt(refDateStr) {
   winStart.setDate(winStart.getDate() - 179);
   let days = 0;
   state.cities.forEach(c => {
+    if (c.status === 'eliminated') return;
     if (!isSchengen(c.country) || !c.checkIn || !c.checkOut) return;
     const cIn = parseDate(c.checkIn);
     const cOut = parseDate(c.checkOut);
@@ -2142,7 +2146,7 @@ function schengenDaysUsedAt(refDateStr) {
 
 // Peak Schengen usage across the planned itinerary (worst point ahead)
 function peakSchengenAhead() {
-  const cities = state.cities.filter(c => isSchengen(c.country) && c.checkIn && c.checkOut);
+  const cities = state.cities.filter(c => c.status !== 'eliminated' && isSchengen(c.country) && c.checkIn && c.checkOut);
   if (cities.length === 0) return { days: 0, date: null };
   let peak = { days: 0, date: null };
   cities.forEach(c => {
@@ -2444,9 +2448,10 @@ function renderCounters() {
 
   // Use the same timeline filter as the map. When 'all', use everything.
   const range = getMapFilterRange();
-  const inScopeCities = range
+  const inScopeCities = (range
     ? state.cities.filter(c => c.checkIn && c.checkOut && cityInRange(c, range))
-    : state.cities;
+    : state.cities
+  ).filter(c => c.status !== 'eliminated');
   const filterLabel = state.mapFilter && state.mapFilter !== 'all'
     ? ` (filtered: ${getFilterLabel()})`
     : '';
@@ -2664,12 +2669,15 @@ function renderCities() {
   const todayStr = todayISO();
   const activeFilter = state.statusFilter || 'all';
 
-  // Categorize: current vs past vs active by status.
+  // Categorize: current vs past vs active by status vs eliminated.
   // The current city (overlapping today) is rendered in the elevated "Where you are" section,
   // NOT in the itinerary list — keeps the list future-focused.
+  // Eliminated entries are bucketed separately and only shown when the user filters to them.
   const past = [];
+  const eliminated = [];
   const byStatus = { booked: [], shortlisted: [], tentative: [] };
   cities.forEach(c => {
+    if (c.status === 'eliminated') { eliminated.push(c); return; }
     if (c.checkOut && c.checkOut < todayStr) { past.push(c); return; }
     // Skip the current city — it lives up in "Where you are" now
     if (c.checkIn && c.checkOut && c.checkIn <= todayStr && c.checkOut > todayStr) return;
@@ -2740,6 +2748,23 @@ function renderCities() {
       transitionsForCity(city.id).forEach(t => container.appendChild(buildAdminTransitMini(t)));
     });
   }
+  else if (activeFilter === 'eliminated') {
+    // Render eliminated entries as a flat list — preserved for reference, not counted toward totals
+    if (eliminated.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'now-empty';
+      empty.textContent = 'No eliminated entries. Use this status to retire a destination without losing it.';
+      container.appendChild(empty);
+    } else {
+      eliminated.forEach(city => {
+        const card = renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), false);
+        card.style.opacity = '0.55';
+        card.style.filter = 'grayscale(60%)';
+        container.appendChild(card);
+        transitionsForCity(city.id).forEach(t => container.appendChild(buildAdminTransitMini(t)));
+      });
+    }
+  }
   // Past travel now renders in its own dedicated section below Ideas (renderPastTravel)
 }
 
@@ -2749,7 +2774,7 @@ function renderPastTravel() {
   const meta = document.getElementById('past-meta');
   if (!section || !list) return;
   const todayStr = todayISO();
-  const past = state.cities.filter(c => c.checkOut && c.checkOut < todayStr);
+  const past = state.cities.filter(c => c.status !== 'eliminated' && c.checkOut && c.checkOut < todayStr);
   // Hide entire section if no past travel
   if (past.length === 0) {
     section.style.display = 'none';
@@ -2777,8 +2802,9 @@ function renderStatusFilters() {
   const container = document.getElementById('status-filters');
   if (!container) return;
   const todayStr = todayISO();
-  const counts = { all: 0, booked: 0, shortlisted: 0, tentative: 0, past: 0, current: 0 };
+  const counts = { all: 0, booked: 0, shortlisted: 0, tentative: 0, past: 0, current: 0, eliminated: 0 };
   state.cities.forEach(c => {
+    if (c.status === 'eliminated') { counts.eliminated++; return; }
     if (c.checkOut && c.checkOut < todayStr) { counts.past++; counts.all++; return; }
     if (c.checkIn && c.checkOut && c.checkIn <= todayStr && c.checkOut > todayStr) {
       // current city — counted as "current" only, NOT in active status totals (lives in Where you are)
@@ -2796,7 +2822,8 @@ function renderStatusFilters() {
     { key: 'booked', label: 'Booked' },
     { key: 'shortlisted', label: 'Shortlisted' },
     { key: 'tentative', label: 'Tentative' },
-    { key: 'past', label: 'Past' }
+    { key: 'past', label: 'Past' },
+    { key: 'eliminated', label: 'Eliminated' }
   ];
   container.innerHTML = '';
   filters.forEach(f => {
@@ -3083,7 +3110,7 @@ function buildCityFields(city) {
   statusLabel.innerHTML = '<span class="field-label">Status</span>';
   const sel = document.createElement('select');
   sel.className = 'field-input';
-  ['tentative','shortlisted','booked'].forEach(s => {
+  ['tentative','shortlisted','booked','eliminated'].forEach(s => {
     const o = document.createElement('option');
     o.value = s; o.textContent = s.charAt(0).toUpperCase() + s.slice(1);
     if (s === (city.status || 'tentative')) o.selected = true;
@@ -5386,6 +5413,12 @@ function updateCity(id, key, value) {
   if (key === 'checkIn' || key === 'checkOut' || key === 'country' || key === 'lat' || key === 'lng') {
     autoScoreCity(id);
   }
+  // Schengen scores depend on the entire itinerary, so any change to dates,
+  // country, or status (eliminated affects whether a city counts) must
+  // recompute Schengen scores for ALL cities, not just this one.
+  if (key === 'checkIn' || key === 'checkOut' || key === 'country' || key === 'status') {
+    recomputeGlobalScores();
+  }
   renderNow();
   renderCounters();
   renderCities();
@@ -5404,6 +5437,7 @@ function deleteCity(id) {
   if (armConfirm('deleteCity:' + id, `Click delete again to permanently remove ${c.name}.`)) return;
   state.cities = state.cities.filter(c => c.id !== id);
   openCityIds.delete(id);
+  recomputeGlobalScores(); // deleting a city changes the Schengen total for everyone
   saveState();
   renderAll();
   toast('Deleted ' + c.name + '.', 'ok');
@@ -5541,6 +5575,7 @@ function costInWindow(startISO, endISO) {
   let stayCost = 0;
   let transitCost = 0;
   (state.cities || []).forEach(city => {
+    if (city.status === 'eliminated') return;
     (city.accommodations || []).forEach(a => {
       if (a.status !== 'booked' || !a.checkIn || !a.checkOut || !a.cost) return;
       const accStartMS = new Date(a.checkIn + 'T00:00:00').getTime();
@@ -7374,6 +7409,17 @@ function autoScoreCity(cityId) {
   city.scores.proximity = scoreProximity(city);
 }
 
+// Schengen score depends on GLOBAL rolling state (all other cities' dates), so
+// when any city's dates/country/status changes, every city's Schengen score
+// needs to be recomputed — not just the one that changed. Same will apply to
+// FEIE / US-day scores if those get cached in the future.
+function recomputeGlobalScores() {
+  state.cities.forEach(c => {
+    if (!c.scores) c.scores = {};
+    c.scores.schengen = scoreSchengen(c);
+  });
+}
+
 // ==================== SCORE MODAL ====================
 
 let _scoreCityId = null;
@@ -7671,6 +7717,9 @@ linkDatePair(addInEl, addOutEl);
 
 populateCountries();
 setupProfile();
+// Refresh Schengen scores on load — they may be stale if other cities were
+// added/removed/eliminated since the last edit of any given city.
+recomputeGlobalScores();
 renderAll();
 startHeroTick();  // keeps the displayed time live (refreshes every 60s)
 </script>
