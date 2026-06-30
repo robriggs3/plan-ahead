@@ -1541,7 +1541,7 @@
 const STORAGE_KEY = 'planahead:v1';
 // Build stamp — bump when shipping. Shown in the footer + logged to console so you can
 // confirm at a glance which code your browser is actually running (rules out stale cache).
-const BUILD = '2026.06.30-5';
+const BUILD = '2026.06.30-6';
 const SNAPSHOTS_KEY = 'planahead:v1:snapshots';
 const MAX_AUTO_SNAPSHOTS = 7;    // daily auto rolling — about a week
 const MAX_MANUAL_SNAPSHOTS = 10; // generous cap for user snapshots
@@ -3368,20 +3368,31 @@ function buildStayAndTravel(city) {
       if (!dy) return -1;
       return dx < dy ? -1 : 1;
     }
-    // 2) Same date, different types (one stay + one leg) → location rule:
-    //    stay is in the leg's DESTINATION  → leg first (travel in, then check in)
-    //    stay is in the leg's ORIGIN       → stay first (sleep, then depart)
-    //    otherwise fall back to the leg's departure time vs a 15:00 check-in anchor.
+    // 2) Same date, different types (one stay + one leg). Decide order from the dates first,
+    //    which is reliable even when the per-stay city hasn't been filled in:
+    //      • leg departs on the stay's CHECK-OUT day → stay first (sleep here, then leave)
+    //      • leg departs on the stay's CHECK-IN day  → leg first (travel in, then check in)
+    //    Only if neither matches do we fall back to an explicit per-stay city, then to time.
     if (x.kind !== y.kind) {
-      const stay = x.kind === 'stay' ? x : y;
-      const leg  = x.kind === 'leg'  ? x : y;
-      const sc   = stayCityOf(stay);
-      const dest = (leg.ref.toCity || '').trim().toLowerCase();
-      const orig = (leg.ref.fromCity || parentCity || '').trim().toLowerCase();
+      const stayE = x.kind === 'stay' ? x : y;
+      const legE  = x.kind === 'leg'  ? x : y;
+      const legDate = legE.ref.departureDate || '';
+      const ci = stayE.ref.checkIn || '';
+      const co = stayE.ref.checkOut || '';
       let legFirst;
-      if (sc && dest && sc === dest) legFirst = true;
-      else if (sc && orig && sc === orig) legFirst = false;
-      else legFirst = (leg.ref.departureTime || '12:00') < '15:00';
+      if (legDate && co && legDate === co) legFirst = false;       // departing this stay
+      else if (legDate && ci && legDate === ci) legFirst = true;   // arriving into this stay
+      else {
+        // No clean date match — use the per-stay city ONLY if explicitly set (the parent-city
+        // default is unreliable for multi-city legs), else a departure-time heuristic.
+        const cityExplicit = !!(stayE.ref.city && stayE.ref.city.trim());
+        const sc   = stayCityOf(stayE);
+        const dest = (legE.ref.toCity || '').trim().toLowerCase();
+        const orig = (legE.ref.fromCity || parentCity || '').trim().toLowerCase();
+        if (cityExplicit && sc && dest && sc === dest) legFirst = true;
+        else if (cityExplicit && sc && orig && sc === orig) legFirst = false;
+        else legFirst = (legE.ref.departureTime || '12:00') < '15:00';
+      }
       // Translate "leg first" into the comparator's x/y order.
       if (x.kind === 'leg') return legFirst ? -1 : 1;
       return legFirst ? 1 : -1;
@@ -6041,6 +6052,7 @@ function buildTransitionRow(city, t) {
     '<select class="leg-status-mini accom-mini-field" onclick="event.stopPropagation()" onchange="updateTransition(\'' + tid + '\',\'status\',this.value)">' +
       ['tentative','shortlisted','booked'].map(s => '<option value="' + s + '"' + (t.status === s ? ' selected' : '') + '>' + s.charAt(0).toUpperCase() + s.slice(1) + '</option>').join('') +
     '</select>' +
+    '<button class="icon-btn delete" title="Remove" onclick="event.stopPropagation(); deleteTransition(\'' + tid + '\')">✕</button>' +
     '<span class="transit-chev" style="margin-left:8px;color:var(--text-3);font-size:11px;transition:transform 0.2s;transform:rotate(' + (isOpen ? '0' : '-90') + 'deg)">▾</span>';
 
   // Body wraps the editor + notes + delete — toggled by clicking the summary
@@ -6095,12 +6107,6 @@ function buildTransitionRow(city, t) {
   notes.className = 'transit-notes';
   notes.innerHTML = `Notes (admin only — not shown in family share)<textarea rows="2" placeholder="Layover info, terminal, etc." onchange="updateTransition('${tid}','notes',this.value)">${escapeHTML(t.notes||'')}</textarea>`;
   body.appendChild(notes);
-
-  // Delete button
-  const del = document.createElement('div');
-  del.className = 'transit-actions';
-  del.innerHTML = '<button class="btn-secondary danger" onclick="deleteTransition(\''+tid+'\')">Delete leg</button>';
-  body.appendChild(del);
 
   // Toggle handler on the summary header — same pattern as city / accom accordions:
   // click anywhere except actual form controls toggles the body open/closed.
