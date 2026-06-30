@@ -1541,7 +1541,7 @@
 const STORAGE_KEY = 'planahead:v1';
 // Build stamp — bump when shipping. Shown in the footer + logged to console so you can
 // confirm at a glance which code your browser is actually running (rules out stale cache).
-const BUILD = '2026.06.30-6';
+const BUILD = '2026.06.30-7';
 const SNAPSHOTS_KEY = 'planahead:v1:snapshots';
 const MAX_AUTO_SNAPSHOTS = 7;    // daily auto rolling — about a week
 const MAX_MANUAL_SNAPSHOTS = 10; // generous cap for user snapshots
@@ -4682,6 +4682,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .empty { color: var(--text-3); font-style: italic; padding: 24px; text-align: center; background: var(--bg-softer); border: 1px dashed var(--border); border-radius: 8px; font-size: 13px; }
 /* Travel legs between cities */
 .transit { display: flex; align-items: center; gap: 12px; margin: 6px 0 6px 22px; padding: 10px 14px; background: var(--bg-softer); border: 1px solid var(--border-light); border-left: 3px solid var(--text-3); border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-2); letter-spacing: 0.02em; }
+.transit.indent { margin-left: 28px; }
 .transit.status-booked { border-left-color: var(--green); }
 .transit.status-shortlisted { border-left-color: var(--blue); }
 .transit.status-tentative { border-left-color: var(--amber); }
@@ -4765,14 +4766,68 @@ function renderAccoms(accoms, isCurrentCity) {
   if (!accoms || !accoms.length) return '';
   const booked = accoms.filter(a => a.status === 'booked');
   const list = booked.length > 0 ? booked : accoms;
-  return list.map(a => {
-    const isCurrentAccom = isCurrentCity && isCurrentAccommodation(a);
-    const cls = 'accom-item' + (isCurrentAccom ? ' current' : '');
-    const linkBit = a.link ? ' · <a href="' + escapeHTML(a.link) + '" target="_blank" rel="noopener">view booking</a>' : '';
-    const nbhdBit = a.neighborhood ? escapeHTML(a.neighborhood) + ' · ' : '';
-    const datesBit = a.checkIn && a.checkOut ? fmtDate(a.checkIn) + ' → ' + fmtDate(a.checkOut) : '';
-    return '<div class="' + cls + '"><div class="accom-name">' + escapeHTML(a.name) + '</div><div class="accom-meta">' + nbhdBit + datesBit + linkBit + '</div></div>';
-  }).join('');
+  return list.map(a => buildStayRow(a, isCurrentCity)).join('');
+}
+
+// Single stay row (extracted so stays and travel legs can be interleaved chronologically).
+function buildStayRow(a, isCurrentCity) {
+  const isCurrentAccom = isCurrentCity && isCurrentAccommodation(a);
+  const cls = 'accom-item' + (isCurrentAccom ? ' current' : '');
+  const linkBit = a.link ? ' · <a href="' + escapeHTML(a.link) + '" target="_blank" rel="noopener">view booking</a>' : '';
+  const cityBit = (a.city && a.city.trim()) ? escapeHTML(a.city.trim()) + ' · ' : '';
+  const nbhdBit = a.neighborhood ? escapeHTML(a.neighborhood) + ' · ' : '';
+  const datesBit = a.checkIn && a.checkOut ? fmtDate(a.checkIn) + ' → ' + fmtDate(a.checkOut) : '';
+  return '<div class="' + cls + '"><div class="accom-name">' + escapeHTML(a.name) + '</div><div class="accom-meta">' + cityBit + nbhdBit + datesBit + linkBit + '</div></div>';
+}
+
+// Sort a mixed list of stays + legs into one chronological timeline — IDENTICAL logic to the
+// admin app's buildStayAndTravel comparator, so the family view matches what Rob sees.
+function stayTravelSort(entries, parentCityName) {
+  const parent = (parentCityName || '').trim().toLowerCase();
+  function entryDate(e) { return e.kind === 'stay' ? (e.ref.checkIn || '') : (e.ref.departureDate || ''); }
+  entries.sort(function(x, y) {
+    const dx = entryDate(x), dy = entryDate(y);
+    if (dx !== dy) { if (!dx) return 1; if (!dy) return -1; return dx < dy ? -1 : 1; }
+    if (x.kind !== y.kind) {
+      const stayE = x.kind === 'stay' ? x : y;
+      const legE  = x.kind === 'leg'  ? x : y;
+      const legDate = legE.ref.departureDate || '', ci = stayE.ref.checkIn || '', co = stayE.ref.checkOut || '';
+      let legFirst;
+      if (legDate && co && legDate === co) legFirst = false;
+      else if (legDate && ci && legDate === ci) legFirst = true;
+      else {
+        const cityExplicit = !!(stayE.ref.city && stayE.ref.city.trim());
+        const sc = ((stayE.ref.city && stayE.ref.city.trim()) || parentCityName || '').trim().toLowerCase();
+        const dest = (legE.ref.toCity || '').trim().toLowerCase();
+        const orig = (legE.ref.fromCity || parent || '').trim().toLowerCase();
+        if (cityExplicit && sc && dest && sc === dest) legFirst = true;
+        else if (cityExplicit && sc && orig && sc === orig) legFirst = false;
+        else legFirst = (legE.ref.departureTime || '12:00') < '15:00';
+      }
+      if (x.kind === 'leg') return legFirst ? -1 : 1;
+      return legFirst ? 1 : -1;
+    }
+    if (x.kind === 'leg') {
+      const tx = x.ref.departureTime || '99:99', ty = y.ref.departureTime || '99:99';
+      return tx < ty ? -1 : (tx > ty ? 1 : 0);
+    }
+    return (x.ref.name || '').localeCompare(y.ref.name || '');
+  });
+  return entries;
+}
+
+// Merged, chronologically-sorted stay + travel timeline for one city (legs indented).
+function buildStayTravelTimeline(city, isCurrentCity) {
+  const accoms = city.accommodations || [];
+  const booked = accoms.filter(a => a.status === 'booked');
+  const stays = booked.length > 0 ? booked : accoms;
+  const legs = transitsFromCity(city);
+  const entries = [];
+  stays.forEach(a => entries.push({ kind: 'stay', ref: a }));
+  legs.forEach(t => entries.push({ kind: 'leg', ref: t }));
+  if (!entries.length) return '';
+  stayTravelSort(entries, city.name);
+  return entries.map(e => e.kind === 'stay' ? buildStayRow(e.ref, isCurrentCity) : buildTransit(e.ref, true)).join('');
 }
 
 function pill(status) {
@@ -4808,11 +4863,11 @@ function render() {
   const cs = document.getElementById('current-section');
   if (current) {
     const daysLeft = Math.round((new Date(current.checkOut + 'T00:00:00') - new Date(TODAY + 'T00:00:00')) / 86400000);
-    const outbound = transitsFromCity(current);
-    const outboundHTML = outbound.length > 0
-      ? '<div class="accom-block"><div class="accom-label">Next leg out</div>' + outbound.map(buildTransit).join('') + '</div>'
+    const timeline = buildStayTravelTimeline(current, true);
+    const timelineHTML = timeline
+      ? '<div class="accom-block"><div class="accom-label">Stay &amp; travel</div>' + timeline + '</div>'
       : '';
-    cs.innerHTML = '<div class="current-banner"><div class="you-are-here-badge">● ' + escapeHTML(TRAVELER) + ' is here</div><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + (current.accommodations.length ? '<div class="accom-block"><div class="accom-label">Where ' + escapeHTML(TRAVELER) + ' is staying</div>' + renderAccoms(current.accommodations, true) + '</div>' : '') + outboundHTML + '</div>';
+    cs.innerHTML = '<div class="current-banner"><div class="you-are-here-badge">● ' + escapeHTML(TRAVELER) + ' is here</div><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + timelineHTML + '</div>';
   } else {
     cs.innerHTML = '<div class="current-banner" style="border-color:var(--border);box-shadow:var(--shadow-sm);padding-top:24px"><div style="text-align:center;color:var(--text-3);font-style:italic;font-family:Fraunces,serif;font-size:18px">Between stays — see upcoming below</div></div>';
   }
@@ -4831,7 +4886,6 @@ function render() {
   } else {
     future.forEach(c => {
       fs.innerHTML += buildLeg(c, false);
-      transitsFromCity(c).forEach(t => fs.innerHTML += buildTransit(t));
     });
   }
 
@@ -4840,7 +4894,6 @@ function render() {
     ps.innerHTML = '<div class="section-head"><h2>Where ' + escapeHTML(TRAVELER) + ' has been</h2><span class="meta">' + past.length + ' stop' + (past.length===1?'':'s') + '</span></div>';
     past.forEach(c => {
       ps.innerHTML += buildLeg(c, true);
-      transitsFromCity(c).forEach(t => ps.innerHTML += buildTransit(t));
     });
   }
 
@@ -4849,17 +4902,18 @@ function render() {
 
 function buildLeg(c, isPast) {
   const cls = isPast ? 'leg past' : 'leg';
-  return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div></div>' + (c.accommodations.length ? '<div class="leg-accom">' + renderAccoms(c.accommodations, false) + '</div>' : '') + '</div>';
+  const timeline = buildStayTravelTimeline(c, false);
+  return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div></div>' + (timeline ? '<div class="leg-accom">' + timeline + '</div>' : '') + '</div>';
 }
 
 // Icon mapper for transit modes (must match the admin app's TRANSITION_MODES)
 const TRANSIT_ICONS = { flight: '✈', train: '🚆', cruise: '🚢', bus: '🚌', ferry: '⛴', drive: '🚗', rideshare: '🚖', other: '➜' };
 const TRANSIT_LABELS = { flight: 'Flight', train: 'Train', cruise: 'Cruise', bus: 'Bus', ferry: 'Ferry', drive: 'Drive', rideshare: 'Rideshare', other: 'Travel' };
 
-function buildTransit(t) {
+function buildTransit(t, indent) {
   if (!t) return '';
   const isPast = t.arrivalDate && t.arrivalDate < TODAY;
-  const cls = 'transit status-' + (t.status || 'tentative') + (isPast ? ' past' : '');
+  const cls = 'transit status-' + (t.status || 'tentative') + (isPast ? ' past' : '') + (indent ? ' indent' : '');
   const icon = TRANSIT_ICONS[t.mode] || '➜';
   const label = TRANSIT_LABELS[t.mode] || 'Travel';
   const carrierBit = (t.carrier || t.number) ? [t.carrier, t.number].filter(Boolean).join(' ') : label;
