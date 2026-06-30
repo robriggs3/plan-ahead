@@ -493,6 +493,13 @@
   .staytravel-list { display: flex; flex-direction: column; gap: 10px; }
   .staytravel-list .accom-item { border-left: 3px solid var(--border); }
   .staytravel-list .transit-item { margin-left: 0; }
+  /* Internal hops (a leg with another stay after it) are indented to read as a sub-movement
+     nested under the surrounding stays. The exit leg stays at the base level. */
+  .staytravel-list .transit-item.leg-internal { margin-left: 32px; position: relative; }
+  .staytravel-list .transit-item.leg-internal::before {
+    content: ''; position: absolute; left: -18px; top: 50%;
+    width: 12px; height: 1px; background: var(--border);
+  }
   .transit-item {
     background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;
     border-left: 3px solid var(--text-3);
@@ -1530,7 +1537,7 @@
 const STORAGE_KEY = 'planahead:v1';
 // Build stamp — bump when shipping. Shown in the footer + logged to console so you can
 // confirm at a glance which code your browser is actually running (rules out stale cache).
-const BUILD = '2026.06.30-1';
+const BUILD = '2026.06.30-2';
 const SNAPSHOTS_KEY = 'planahead:v1:snapshots';
 const MAX_AUTO_SNAPSHOTS = 7;    // daily auto rolling — about a week
 const MAX_MANUAL_SNAPSHOTS = 10; // generous cap for user snapshots
@@ -3393,7 +3400,17 @@ function buildStayAndTravel(city) {
     empty.textContent = 'Nothing planned yet. Add where you\'ll sleep and how you\'ll get to the next place.';
     list.appendChild(empty);
   } else {
-    entries.forEach(e => list.appendChild(e.node()));
+    // A leg is "internal" to this stay if there's still a stay AFTER it (you travel, then
+    // sleep here again — e.g. a hop to a nearby town). Those get indented to read as
+    // sub-movements. The final exit leg(s), with no stay after, stay at the base level as
+    // the prominent transition out.
+    let lastStayIdx = -1;
+    entries.forEach((e, i) => { if (e.kind === 'stay') lastStayIdx = i; });
+    entries.forEach((e, i) => {
+      const node = e.node();
+      if (e.kind === 'leg' && i < lastStayIdx) node.classList.add('leg-internal');
+      list.appendChild(node);
+    });
   }
   wrap.appendChild(list);
   return wrap;
