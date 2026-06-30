@@ -1391,7 +1391,7 @@
 
   <footer class="footer">
     <div>Built by <a href="https://robriggs.com" target="_blank" rel="noopener noreferrer">Rob Riggs</a> · <a href="https://codeconspirators.com" target="_blank" rel="noopener noreferrer">Code Conspirators</a> · <a href="https://github.com/robriggs3/plan-ahead" target="_blank" rel="noopener noreferrer" id="footer-github">★ Star on GitHub</a></div>
-    <div class="footer-privacy">Your data never leaves your browser.</div>
+    <div class="footer-privacy">Your data never leaves your browser. · <span id="build-stamp" style="opacity:0.6"></span></div>
   </footer>
 
 </div>
@@ -1528,6 +1528,9 @@
 'use strict';
 
 const STORAGE_KEY = 'planahead:v1';
+// Build stamp — bump when shipping. Shown in the footer + logged to console so you can
+// confirm at a glance which code your browser is actually running (rules out stale cache).
+const BUILD = '2026.06.30-1';
 const SNAPSHOTS_KEY = 'planahead:v1:snapshots';
 const MAX_AUTO_SNAPSHOTS = 7;    // daily auto rolling — about a week
 const MAX_MANUAL_SNAPSHOTS = 10; // generous cap for user snapshots
@@ -3323,23 +3326,63 @@ function buildStayAndTravel(city) {
     '</div>';
   wrap.insertAdjacentHTML('beforeend', headerHTML);
 
-  // Build a single date-sorted list of mixed rows. Each entry carries a sort key and a
-  // type so beds and legs interleave in true chronological order.
+  // Build a single chronologically-ordered list mixing beds and legs. Each entry keeps a
+  // reference to its underlying record so the comparator can apply date, time, and the
+  // location rule for same-day ties.
+  const parentCity = (city.name || '').trim().toLowerCase();
   const entries = [];
   (city.accommodations || []).forEach(a => {
-    entries.push({ kind: 'stay', sortKey: a.checkIn || city.checkIn || '', node: () => buildAccommodation(city, a) });
+    entries.push({ kind: 'stay', ref: a, node: () => buildAccommodation(city, a) });
   });
   transitionsForCity(cid).forEach(t => {
-    entries.push({ kind: 'leg', sortKey: t.departureDate || city.checkOut || '', node: () => buildTransitionRow(city, t) });
+    entries.push({ kind: 'leg', ref: t, node: () => buildTransitionRow(city, t) });
   });
+
+  // The anchor DATE for an entry (stays anchor on check-in, legs on departure).
+  function entryDate(e) {
+    return e.kind === 'stay'
+      ? (e.ref.checkIn || city.checkIn || '')
+      : (e.ref.departureDate || '');
+  }
+  // A stay's effective city = its own override, else the itinerary city.
+  function stayCityOf(stay) {
+    return ((stay.ref.city && stay.ref.city.trim()) || city.name || '').trim().toLowerCase();
+  }
+
   entries.sort((x, y) => {
-    const a = x.sortKey || '', b = y.sortKey || '';
-    if (a && b && a !== b) return a.localeCompare(b);
-    if (a && !b) return -1;
-    if (!a && b) return 1;
-    // Same (or both empty) date: a stay comes before the leg that departs it.
-    if (x.kind !== y.kind) return x.kind === 'stay' ? -1 : 1;
-    return 0;
+    const dx = entryDate(x), dy = entryDate(y);
+    // 1) Primary: by date. Undated entries sink to the bottom.
+    if (dx !== dy) {
+      if (!dx) return 1;
+      if (!dy) return -1;
+      return dx < dy ? -1 : 1;
+    }
+    // 2) Same date, different types (one stay + one leg) → location rule:
+    //    stay is in the leg's DESTINATION  → leg first (travel in, then check in)
+    //    stay is in the leg's ORIGIN       → stay first (sleep, then depart)
+    //    otherwise fall back to the leg's departure time vs a 15:00 check-in anchor.
+    if (x.kind !== y.kind) {
+      const stay = x.kind === 'stay' ? x : y;
+      const leg  = x.kind === 'leg'  ? x : y;
+      const sc   = stayCityOf(stay);
+      const dest = (leg.ref.toCity || '').trim().toLowerCase();
+      const orig = (leg.ref.fromCity || parentCity || '').trim().toLowerCase();
+      let legFirst;
+      if (sc && dest && sc === dest) legFirst = true;
+      else if (sc && orig && sc === orig) legFirst = false;
+      else legFirst = (leg.ref.departureTime || '12:00') < '15:00';
+      // Translate "leg first" into the comparator's x/y order.
+      if (x.kind === 'leg') return legFirst ? -1 : 1;
+      return legFirst ? 1 : -1;
+    }
+    // 3) Same date, two legs → by departure time (timed before untimed).
+    if (x.kind === 'leg') {
+      const tx = x.ref.departureTime || '99:99';
+      const ty = y.ref.departureTime || '99:99';
+      return tx < ty ? -1 : (tx > ty ? 1 : 0);
+    }
+    // 4) Same date, two stays → by name for a stable order.
+    return (x.ref.name || '').localeCompare(y.ref.name || '');
   });
 
   const list = document.createElement('div');
@@ -3606,6 +3649,10 @@ function buildAccommodation(city, acc) {
   function renderSummary() {
     const nights = nightsBetween(acc.checkIn, acc.checkOut);
     const parts = [];
+    // Show the property's city when it's been overridden to differ from the itinerary city
+    if (acc.city && acc.city.trim() && acc.city.trim().toLowerCase() !== (city.name || '').trim().toLowerCase()) {
+      parts.push('📍 ' + acc.city.trim());
+    }
     if (acc.neighborhood) parts.push(acc.neighborhood);
     if (nights > 0) parts.push(`${nights} night${nights===1?'':'s'}`);
     if (acc.cost) parts.push(fmtCurrency(acc.cost, acc.currency||'USD'));
@@ -3620,9 +3667,21 @@ function buildAccommodation(city, acc) {
   body.style.display = openAccomIds.has(accId) ? '' : 'none';
   chev.style.transform = openAccomIds.has(accId) ? 'rotate(0deg)' : 'rotate(-90deg)';
 
-  // Row 2: neighborhood, check-in, check-out, cost, currency
+  // Row 2: city, neighborhood, check-in, check-out, cost, currency
   const row2 = document.createElement('div');
   row2.className = 'accom-row2';
+
+  // City: where this specific property is. Defaults (via placeholder) to the itinerary
+  // city, so a multi-city leg like "Morocco" can hold stays in Essaouira, Agadir, Marrakech.
+  // Left blank = inherits the parent city. Drives same-day Stay/Travel ordering + the
+  // family-share town name.
+  const cityField = document.createElement('input');
+  cityField.className = 'accom-mini-field';
+  cityField.placeholder = (city.name ? city.name + ' (default)' : 'City');
+  cityField.title = 'City this property is in. Blank = same as the itinerary city (' + (city.name || '—') + ').';
+  cityField.value = acc.city || '';
+  cityField.onblur = () => updateAccom(cityId, accId, 'city', cityField.value.trim());
+  row2.appendChild(cityField);
 
   const nb = document.createElement('input');
   nb.className = 'accom-mini-field';
@@ -4332,6 +4391,7 @@ function buildFamilyShareForCurrentState() {
       .filter(a => a.status === 'booked' || a.status === 'shortlisted')
       .map(a => ({
         name: a.name || '',
+        city: a.city || '',
         neighborhood: a.neighborhood || '',
         link: a.link || '',
         status: a.status || '',
@@ -5593,12 +5653,8 @@ function updateCity(id, key, value) {
   if (key === 'checkIn' || key === 'checkOut' || key === 'country' || key === 'status') {
     recomputeGlobalScores();
   }
-  renderNow();
-  renderCounters();
-  renderCities();
-  if (key === 'lat' || key === 'lng' || key === 'checkIn' || key === 'checkOut' || key === 'country' || key === 'name') {
-    renderMap();
-  }
+  const needsMap = (key === 'lat' || key === 'lng' || key === 'checkIn' || key === 'checkOut' || key === 'country' || key === 'name');
+  repaint({ map: needsMap });
   // Auto-geocode if name or country was set, and we don't have coordinates yet
   if ((key === 'name' || key === 'country') && c.name && c.country && (c.lat == null || c.lat === '')) {
     autoGeocodeCity(id);
@@ -5881,13 +5937,10 @@ function updateTransition(id, key, value) {
   if (!t) return;
   t[key] = value;
   saveState();
-  // Fields now commit on `change`/blur (not per-keystroke `input`), so the edited input
-  // has already lost focus by the time we re-render — no focus-snapping. Re-render every
-  // commit so the leg summary, the "Outbound travel" subtotal, the budget rollup, and the
-  // between-city mini-cards all stay live without a page refresh.
-  renderNow();
-  renderCounters();
-  renderCities();
+  // Fields commit on `change`/blur (not per-keystroke), so the edited input has already
+  // lost focus by the time we repaint — no focus-snapping. Repaint every commit so the leg
+  // summary, the section subtotal, the budget rollup, and the between-city mini-cards stay live.
+  repaint();
 }
 
 function deleteTransition(id) {
@@ -6086,18 +6139,14 @@ function updateAccom(cityId, accId, key, value) {
       const oldCityStatus = c.status || 'tentative';
       c.status = 'booked';
       saveState();
-      renderNow();
-      renderCounters();
-      renderCities();
+      repaint();
       toast(`Auto-promoted ${c.name} to Booked (because a property is booked). Was ${oldCityStatus}.`, 'ok');
       return;
     }
   }
 
   saveState();
-  renderNow();
-  renderCounters();
-  renderCities();
+  repaint();
 }
 
 function removeAccom(cityId, accId) {
@@ -7786,6 +7835,19 @@ function applyPastedScore() {
 
 // ==================== RENDER ALL ====================
 
+// Defensive repaint used by the live-edit handlers. Each render runs in its own try/catch
+// so a failure in one (e.g. the map, or one card with odd data) can never abort the others
+// and leave the screen stale — which is the classic "I had to refresh to see my edit" bug.
+function repaint(opts) {
+  opts = opts || {};
+  const jobs = [renderNow, renderCounters, renderCities];
+  if (opts.map) jobs.push(renderMap);
+  for (const fn of jobs) {
+    try { fn(); }
+    catch (e) { console.error('[repaint] ' + (fn.name || 'render') + ' threw:', e); }
+  }
+}
+
 function renderAll() {
   updateHero();
   // Restore map filter UI state
@@ -7900,6 +7962,16 @@ setupProfile();
 recomputeGlobalScores();
 renderAll();
 startHeroTick();  // keeps the displayed time live (refreshes every 60s)
+
+// Build stamp: surface which code is actually running (footer + console) so a stale
+// browser cache can be ruled out instantly when debugging "my edit didn't show".
+(function stampBuild() {
+  try {
+    const el = document.getElementById('build-stamp');
+    if (el) el.textContent = 'build ' + BUILD;
+    console.log('%cPlan-Ahead build ' + BUILD, 'color:#c72027;font-weight:600');
+  } catch (e) {}
+})();
 </script>
 
 </body>
