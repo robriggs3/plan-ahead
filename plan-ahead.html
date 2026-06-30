@@ -1541,7 +1541,7 @@
 const STORAGE_KEY = 'planahead:v1';
 // Build stamp — bump when shipping. Shown in the footer + logged to console so you can
 // confirm at a glance which code your browser is actually running (rules out stale cache).
-const BUILD = '2026.06.30-7';
+const BUILD = '2026.06.30-8';
 const SNAPSHOTS_KEY = 'planahead:v1:snapshots';
 const MAX_AUTO_SNAPSHOTS = 7;    // daily auto rolling — about a week
 const MAX_MANUAL_SNAPSHOTS = 10; // generous cap for user snapshots
@@ -3362,10 +3362,11 @@ function buildStayAndTravel(city) {
 
   entries.sort((x, y) => {
     const dx = entryDate(x), dy = entryDate(y);
-    // 1) Primary: by date. Undated entries sink to the bottom.
+    // 1) Primary: by date. Undated entries (e.g. a just-added stay) float to the TOP as
+    // unscheduled drafts, so they appear right where the add button is.
     if (dx !== dy) {
-      if (!dx) return 1;
-      if (!dy) return -1;
+      if (!dx) return -1;
+      if (!dy) return 1;
       return dx < dy ? -1 : 1;
     }
     // 2) Same date, different types (one stay + one leg). Decide order from the dates first,
@@ -4787,7 +4788,7 @@ function stayTravelSort(entries, parentCityName) {
   function entryDate(e) { return e.kind === 'stay' ? (e.ref.checkIn || '') : (e.ref.departureDate || ''); }
   entries.sort(function(x, y) {
     const dx = entryDate(x), dy = entryDate(y);
-    if (dx !== dy) { if (!dx) return 1; if (!dy) return -1; return dx < dy ? -1 : 1; }
+    if (dx !== dy) { if (!dx) return -1; if (!dy) return 1; return dx < dy ? -1 : 1; }
     if (x.kind !== y.kind) {
       const stayE = x.kind === 'stay' ? x : y;
       const legE  = x.kind === 'leg'  ? x : y;
@@ -6013,8 +6014,7 @@ function addTransition(cityId) {
   // Auto-open the new leg so the user can fill in details immediately, no extra click needed
   openTransitionIds.add(newTransition.id);
   saveState();
-  renderNow();
-  renderCities();
+  repaint();
 }
 
 function updateTransition(id, key, value) {
@@ -6232,13 +6232,17 @@ function addAccommodation(cityId) {
   const c = state.cities.find(c => c.id === cityId);
   if (!c) return;
   if (!c.accommodations) c.accommodations = [];
-  c.accommodations.push({
-    id: newId(), name: '', link: '', neighborhood: '',
-    checkIn: c.checkIn || '', checkOut: c.checkOut || '',
+  const id = newId();
+  // Prepend + leave dates empty so it floats to the top of the section (dateless = unscheduled,
+  // sorted first) right where the "+ Add stay" button is, ready to fill in.
+  c.accommodations.unshift({
+    id, name: '', link: '', neighborhood: '', city: '',
+    checkIn: '', checkOut: '',
     cost: '', currency: 'USD', status: 'considering', notes: ''
   });
+  openAccomIds.add(id);   // open it immediately as an editable box
   saveState();
-  renderCities();
+  repaint();              // repaint() (not just renderCities) so the elevated "Where you are" card updates too
 }
 
 function updateAccom(cityId, accId, key, value) {
