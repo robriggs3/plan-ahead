@@ -318,6 +318,14 @@
   .cost-sub.over { color: var(--accent); }
   .cost-sub.under { color: var(--green); }
   .cost-sub.transit-sub { color: var(--text-3); font-style: italic; }
+  /* Labeled cost breakdown in the city header (Stays / Travel / Total + per-month) */
+  .cost-breakdown { display: flex; flex-direction: column; gap: 1px; text-transform: none; letter-spacing: 0.02em; }
+  .cost-line { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; line-height: 1.3; min-width: 150px; }
+  .cost-line .cl-label { color: var(--text-3); }
+  .cost-line .cl-val { color: var(--text-2); font-weight: 500; }
+  .cost-line.cl-total { border-top: 1px solid var(--border-light); margin-top: 2px; padding-top: 2px; }
+  .cost-line.cl-total .cl-label { color: var(--text-2); }
+  .cost-line.cl-total .cl-val { color: var(--text); font-weight: 600; }
   .city-chev {
     color: var(--text-3); font-size: 16px; transition: transform 0.2s;
   }
@@ -482,6 +490,9 @@
     .transit-mini-time { width: 100%; margin-top: 4px; }
   }
   .transit-list { display: flex; flex-direction: column; gap: 8px; }
+  .staytravel-list { display: flex; flex-direction: column; gap: 10px; }
+  .staytravel-list .accom-item { border-left: 3px solid var(--border); }
+  .staytravel-list .transit-item { margin-left: 0; }
   .transit-item {
     background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px;
     border-left: 3px solid var(--text-3);
@@ -1337,6 +1348,8 @@
           <button class="btn-secondary" onclick="toggleGithubSetup()">⚙ GitHub setup</button>
         </div>
 
+        <div id="publish-freshness" style="margin-top:10px;font-size:12px;font-family:'JetBrains Mono',monospace;letter-spacing:0.02em;line-height:1.5"></div>
+
         <div id="github-setup-block" style="display:none;margin-top:14px;padding:14px;background:var(--bg-softer);border:1px dashed var(--border);border-radius:8px">
           <div style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);margin-bottom:10px">GitHub publishing setup</div>
           <div style="font-size:12px;color:var(--text-2);line-height:1.6;margin-bottom:12px">
@@ -1756,7 +1769,33 @@ let state = loadState();
 
 function saveState() {
   state.lastSession = new Date().toISOString();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const payload = JSON.stringify(state);
+  try {
+    localStorage.setItem(STORAGE_KEY, payload);
+  } catch (e) {
+    // localStorage quota exceeded is the most likely cause of "my edits vanished on refresh":
+    // the in-memory state looks updated and the UI reflects it, but nothing was persisted.
+    // Recover space by pruning the oldest auto-snapshots (cheapest data to lose) and retry,
+    // then warn LOUDLY if it still fails so the user can export before losing work.
+    console.error('saveState failed (likely storage quota):', e);
+    let recovered = false;
+    try {
+      let snaps = loadSnapshots();
+      const autos = snaps.filter(s => s.isAuto).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      while (autos.length > 2) { // keep newest 2 autos as a recovery floor
+        const victim = autos.shift();
+        snaps = snaps.filter(s => s.id !== victim.id);
+        saveSnapshotsArray(snaps);
+        try { localStorage.setItem(STORAGE_KEY, payload); recovered = true; break; } catch (e2) {}
+      }
+    } catch (e3) { console.error('Snapshot prune during save recovery failed:', e3); }
+    if (recovered) {
+      toast('Storage was full — cleared old auto-snapshots to save your changes. Export a backup soon (Settings → Export).', 'ok');
+    } else {
+      toast('⚠ COULD NOT SAVE — browser storage is full. Export your data now (Settings → Export) before refreshing, or recent edits will be lost.', 'error');
+      return; // do NOT call showSaved(): we must not signal "saved" when it failed
+    }
+  }
   showSaved();
   updateHero();
 }
@@ -1979,7 +2018,7 @@ function buildPerMonthSub(cityCost, nights) {
       comparison = ' · on budget';
     }
   }
-  return `<span class="cost-sub ${cls}" title="${fmtCurrency(perMonth,'USD')} per 30-day month at this rate${budget>0 ? ' vs your $' + budget + '/mo target' : ''}">~${fmtCurrency(perMonth,'USD')}/mo${comparison}</span>`;
+  return `<span class="cost-sub ${cls}" title="Total spend (stays + travel) per 30-day month at this pace${budget>0 ? ', vs your $' + budget + '/mo target' : ''}">~${fmtCurrency(perMonth,'USD')}/mo${comparison}</span>`;
 }
 
 // Sorted cities by check-in (cities without dates go to end)
@@ -2431,8 +2470,12 @@ function renderNow() {
         if (oc.includes('demoteCity') || oc.includes('deleteCity')) btn.remove();
       });
       elevatedContainer.appendChild(card);
-      // Append outbound transit cards so the user sees what's booked/unbooked at a glance
-      transitionsForCity(current.id).forEach(t => elevatedContainer.appendChild(buildAdminTransitMini(t)));
+      // Outbound transit at-a-glance — only when the elevated card is COLLAPSED. When it's
+      // expanded, the merged Stay & Travel timeline already lists every leg with full editors,
+      // so showing the mini-cards too would duplicate them.
+      if (!openCityIds.has(current.id)) {
+        transitionsForCity(current.id).forEach(t => elevatedContainer.appendChild(buildAdminTransitMini(t)));
+      }
     } else {
       // Hide section when no current city
       if (whereSection) whereSection.style.display = 'none';
@@ -3027,12 +3070,19 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
     <div class="city-stats">
       <div class="stat"><span class="num">${nights}</span> nights</div>
       <div class="stat" title="Properties booked vs total candidates"><span class="num">${accomBooked}/${accomCount}</span> stays</div>
-      <div class="stat cost-stat"><span class="num">${fmtCurrency(cityCost,'USD')}</span>${(() => {
+      <div class="stat cost-stat">${(() => {
         const transitCost = cityTransitCost(city);
-        return transitCost > 0
-          ? `<div class="cost-sub transit-sub" title="Booked transit costs for legs departing this city">+ ${fmtCurrency(transitCost, 'USD')} transit</div>`
-          : '';
-      })()}${buildPerMonthSub(cityCost, nights)}</div>
+        const total = cityCost + transitCost;
+        const stayLabel = bookedCost > 0 ? 'Stays' : 'Stays (est)';
+        const lines = [
+          `<div class="cost-line"><span class="cl-label">${stayLabel}</span><span class="cl-val">${fmtCurrency(cityCost,'USD')}</span></div>`
+        ];
+        if (transitCost > 0) {
+          lines.push(`<div class="cost-line"><span class="cl-label">Travel</span><span class="cl-val">${fmtCurrency(transitCost,'USD')}</span></div>`);
+          lines.push(`<div class="cost-line cl-total"><span class="cl-label">Total</span><span class="cl-val">${fmtCurrency(total,'USD')}</span></div>`);
+        }
+        return `<div class="cost-breakdown" title="Stays = max(estimate, booked rooms). Travel = booked transit departing this city.">${lines.join('')}</div>${buildPerMonthSub(total, nights)}`;
+      })()}</div>
     </div>
     <div class="city-chev">▶</div>
   `;
@@ -3056,8 +3106,7 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
   body.appendChild(buildCityFields(city));
   body.appendChild(buildCityNotes(city));
   body.appendChild(buildLatLngRow(city));
-  body.appendChild(buildAccommodations(city));
-  body.appendChild(buildTransitions(city));
+  body.appendChild(buildStayAndTravel(city));
   body.appendChild(buildResearchButton(city));
   body.appendChild(buildCitySubsections(city));
 
@@ -3218,6 +3267,95 @@ function buildCityNotes(city) {
 }
 
 // Accommodations
+// Returns a DOM node for the "uncovered nights" warning panel, or null if fully covered.
+// Factored out so both the legacy accom section and the merged Stay & Travel section can use it.
+function buildUncoveredPanel(city) {
+  const uncovered = uncoveredNights(city);
+  if (uncovered.length === 0) return null;
+  const panel = document.createElement('div');
+  panel.className = 'uncovered-panel';
+  const ranges = [];
+  let curStart = uncovered[0], curEnd = uncovered[0];
+  for (let i = 1; i < uncovered.length; i++) {
+    const prev = new Date(curEnd + 'T12:00:00');
+    const next = new Date(uncovered[i] + 'T12:00:00');
+    if ((next - prev) / 86400000 === 1) { curEnd = uncovered[i]; }
+    else { ranges.push([curStart, curEnd]); curStart = curEnd = uncovered[i]; }
+  }
+  ranges.push([curStart, curEnd]);
+  const rangeText = ranges.map(([s, e]) => (s === e ? fmtDate(s) : fmtDate(s) + ' → ' + fmtDate(e))).join(', ');
+  panel.innerHTML = '<div class="uncovered-head">⚠ <strong>' + uncovered.length + ' night' + (uncovered.length===1?'':'s') + ' without a booked bed</strong></div><div class="uncovered-dates">' + rangeText + '</div><div class="uncovered-note">Coverage is checked globally — an accommodation in any city or any overnight transit counts. Add a stay or extend an existing booking to resolve.</div>';
+  return panel;
+}
+
+// MERGED "Stay & Travel" section: one chronological timeline mixing where-you-sleep (beds)
+// and how-you-get-to-the-next-place (transit legs), sorted by date. This makes both gaps
+// visible at once — a missing bed AND a missing travel leg — so neither gets forgotten.
+// Reuses the existing row builders (buildAccommodation / buildTransitionRow) so all editors,
+// open/close state, and AI scoring continue to work unchanged.
+function buildStayAndTravel(city) {
+  const wrap = document.createElement('div');
+  wrap.className = 'city-block staytravel-section';
+  const cid = city.id;
+
+  // Uncovered-nights warning first (most urgent signal on expand)
+  const panel = buildUncoveredPanel(city);
+  if (panel) wrap.appendChild(panel);
+
+  // Combined booked-cost subtitle: stays + travel, so the section header answers "what's this leg costing me?"
+  const bookedStay = (city.accommodations || []).reduce((s, a) => s + ((a.status === 'booked' && a.cost) ? (Number(a.cost) || 0) : 0), 0);
+  const bookedTransit = cityTransitCost(city);
+  const subParts = ['sleep + get to the next place'];
+  const money = [];
+  if (bookedStay > 0) money.push(fmtCurrency(bookedStay, 'USD') + ' stays');
+  if (bookedTransit > 0) money.push(fmtCurrency(bookedTransit, 'USD') + ' travel');
+  if (money.length) subParts.push(money.join(' · ') + ' booked');
+  const subtitle = subParts.join(' — ');
+
+  const headerHTML =
+    '<div class="city-block-header">' +
+      '<h3 class="city-block-title">Stay &amp; Travel<span class="city-block-subtitle">' + escapeHTML(subtitle) + '</span></h3>' +
+      '<div class="city-block-actions">' +
+        '<button class="btn-secondary" onclick="openBatchScoreModalForAccoms(\''+cid+'\')" title="Score all properties in one batched API call">⚡ Score stays</button>' +
+        '<button class="btn-secondary" onclick="addAccommodation(\''+cid+'\')">+ Add stay</button>' +
+        '<button class="btn-secondary" onclick="addTransition(\''+cid+'\')">+ Add travel leg</button>' +
+      '</div>' +
+    '</div>';
+  wrap.insertAdjacentHTML('beforeend', headerHTML);
+
+  // Build a single date-sorted list of mixed rows. Each entry carries a sort key and a
+  // type so beds and legs interleave in true chronological order.
+  const entries = [];
+  (city.accommodations || []).forEach(a => {
+    entries.push({ kind: 'stay', sortKey: a.checkIn || city.checkIn || '', node: () => buildAccommodation(city, a) });
+  });
+  transitionsForCity(cid).forEach(t => {
+    entries.push({ kind: 'leg', sortKey: t.departureDate || city.checkOut || '', node: () => buildTransitionRow(city, t) });
+  });
+  entries.sort((x, y) => {
+    const a = x.sortKey || '', b = y.sortKey || '';
+    if (a && b && a !== b) return a.localeCompare(b);
+    if (a && !b) return -1;
+    if (!a && b) return 1;
+    // Same (or both empty) date: a stay comes before the leg that departs it.
+    if (x.kind !== y.kind) return x.kind === 'stay' ? -1 : 1;
+    return 0;
+  });
+
+  const list = document.createElement('div');
+  list.className = 'staytravel-list';
+  if (entries.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'sub-empty';
+    empty.textContent = 'Nothing planned yet. Add where you\'ll sleep and how you\'ll get to the next place.';
+    list.appendChild(empty);
+  } else {
+    entries.forEach(e => list.appendChild(e.node()));
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
 function buildAccommodations(city) {
   const wrap = document.createElement('div');
   wrap.className = 'city-block accom-section';
@@ -4224,7 +4362,7 @@ function buildFamilyShareForCurrentState() {
         fromCityId: t.cityId || '',
         mode: t.mode || 'other',
         status: t.status || 'tentative',
-        fromCity: srcCity ? srcCity.name : '',
+        fromCity: t.fromCity || (srcCity ? srcCity.name : ''),
         toCity: t.toCity || '',
         departureDate: t.departureDate || '',
         departureTime: t.departureTime || '',
@@ -4362,6 +4500,7 @@ async function publishFamilyShare() {
     const publishedURL = `https://${state.githubUser}.github.io/${state.githubRepo}/${file}`;
     state.lastPublishedAt = new Date().toISOString();
     saveState();
+    renderPublishFreshness();
 
     setStatus(
       `✓ Published! Share this URL with family: <a href="${publishedURL}" target="_blank" rel="noopener" style="color:var(--accent);font-family:'JetBrains Mono',monospace;font-size:12px">${publishedURL}</a> · <span style="color:var(--text-3);font-size:11px">GitHub Pages takes ~1 minute to update.</span>`,
@@ -4565,7 +4704,14 @@ function render() {
 
   const totalLabel = DATA.cities.length + ' stops · ' + past.length + ' past · ' + (current ? '1 current · ' : '') + future.length + ' upcoming';
   document.getElementById('cover-meta').textContent = totalLabel;
-  document.getElementById('gen-date').textContent = 'Updated ' + new Date(DATA.generatedAt).toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  (function(){
+    var gd = new Date(DATA.generatedAt);
+    var ageDays = Math.floor((Date.now() - gd.getTime()) / 86400000);
+    var ageText = ageDays <= 0 ? 'today' : (ageDays === 1 ? 'yesterday' : ageDays + ' days ago');
+    var human = gd.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+    var stale = ageDays >= 21 ? ' · may be out of date' : '';
+    document.getElementById('gen-date').textContent = 'Updated ' + human + ' · ' + ageText + stale;
+  })();
   document.getElementById('footer-meta').textContent = 'Auto-updating · Last refresh on visit';
 
   const cs = document.getElementById('current-section');
@@ -4772,6 +4918,34 @@ function renderBackupFreshness() {
   } else {
     el.innerHTML = '<span style="color:var(--green)">✓ Last export: ' + human + (days === 0 ? ' (today)' : ' (' + days + ' day' + (days===1?'':'s') + ' ago)') + '</span>';
   }
+}
+
+// Surfaces how current the PUBLISHED family share is. This is the fix for share drift:
+// the published page silently goes stale because re-publishing is a manual step. A visible
+// nudge here (and a louder one when the plan has changed since publish) keeps family current.
+function renderPublishFreshness() {
+  const el = document.getElementById('publish-freshness');
+  if (!el) return;
+  const pub = state.lastPublishedAt ? new Date(state.lastPublishedAt) : null;
+  if (!pub) {
+    el.innerHTML = '<span style="color:var(--text-3)">Not published yet — family can\'t see your plan until you publish.</span>';
+    return;
+  }
+  const days = Math.floor((Date.now() - pub.getTime()) / 86400000);
+  const ageText = days <= 0 ? 'today' : (days === 1 ? 'yesterday' : days + ' days ago');
+  const human = pub.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const editedSince = state.lastSession && new Date(state.lastSession) > pub;
+  let color = 'var(--green)', icon = '✓', msg;
+  if (days >= 14) { color = 'var(--accent)'; icon = '⚠'; }
+  else if (days >= 3 || editedSince) { color = 'var(--amber)'; icon = '●'; }
+  if (editedSince && days >= 1) {
+    msg = 'Plan changed since you last published (' + human + ', ' + ageText + '). Re-publish so family sees the current itinerary.';
+  } else if (days >= 3) {
+    msg = 'Family share last published ' + human + ' (' + ageText + ').';
+  } else {
+    msg = 'Family share is current — published ' + ageText + '.';
+  }
+  el.innerHTML = '<span style="color:' + color + '">' + icon + ' ' + msg + '</span>';
 }
 
 function setPasteStatus(msg, kind) {
@@ -5621,8 +5795,9 @@ function buildAdminTransitMini(t) {
     ? [t.carrier, t.number].filter(Boolean).join(' ')
     : transitionLabel(t.mode);
   const srcCity = state.cities.find(c => c.id === t.cityId);
-  const route = (srcCity && srcCity.name && t.toCity)
-    ? srcCity.name + ' → ' + t.toCity
+  const fromName = t.fromCity || (srcCity ? srcCity.name : '');
+  const route = (fromName && t.toCity)
+    ? fromName + ' → ' + t.toCity
     : (t.toCity ? '→ ' + t.toCity : '— set destination —');
   let timeBit = '';
   if (t.departureDate) {
@@ -5677,6 +5852,7 @@ function addTransition(cityId) {
   const newTransition = {
     id: newId(),
     cityId: cityId,
+    fromCity: c.name || '',
     toCity: nextCity ? nextCity.name : '',
     mode: 'flight',
     status: 'tentative',
@@ -5705,16 +5881,13 @@ function updateTransition(id, key, value) {
   if (!t) return;
   t[key] = value;
   saveState();
-  // CRITICAL: text inputs use oninput which fires per keystroke. Re-rendering destroys
-  // the focused input and snaps the page. Only re-render on changes that actually need
-  // DOM updates — status (pill colors/grouping) and mode (icon).
-  // For other fields, the input already reflects the typed value; the mini-card summary
-  // refreshes on next natural render (page reload, status change, etc.).
-  if (key === 'status' || key === 'mode') {
-    renderNow();
-    renderCounters();
-    renderCities();
-  }
+  // Fields now commit on `change`/blur (not per-keystroke `input`), so the edited input
+  // has already lost focus by the time we re-render — no focus-snapping. Re-render every
+  // commit so the leg summary, the "Outbound travel" subtotal, the budget rollup, and the
+  // between-city mini-cards all stay live without a page refresh.
+  renderNow();
+  renderCounters();
+  renderCities();
 }
 
 function deleteTransition(id) {
@@ -5786,9 +5959,10 @@ function buildTransitionRow(city, t) {
   const dateBit = t.departureDate
     ? fmtDate(t.departureDate) + (t.departureTime ? ' · ' + t.departureTime : '')
     : '<span class="muted">— no date —</span>';
+  const fromLabel = t.fromCity || (city ? city.name : '');
   summary.innerHTML =
     '<span class="transit-icon">' + icon + '</span>' +
-    '<span class="transit-summary-text">' + escapeHTML(summaryLine) + ' → ' + escapeHTML(t.toCity || '?') + '</span>' +
+    '<span class="transit-summary-text">' + escapeHTML(summaryLine) + ' · ' + escapeHTML(fromLabel || '?') + ' → ' + escapeHTML(t.toCity || '?') + '</span>' +
     '<span class="transit-summary-date">' + dateBit + '</span>' +
     (t.cost && Number(t.cost) > 0 ? '<span class="transit-summary-cost">' + escapeHTML(fmtCurrency(Number(t.cost), t.currency || 'USD')) + '</span>' : '') +
     '<span class="transit-chev" style="margin-left:8px;color:var(--text-3);font-size:11px;transition:transform 0.2s;transform:rotate(' + (isOpen ? '0' : '-90') + 'deg)">▾</span>';
@@ -5803,7 +5977,7 @@ function buildTransitionRow(city, t) {
   grid.className = 'transit-fields';
   grid.innerHTML = `
     <label>Mode
-      <select onchange="updateTransition('${tid}','mode',this.value); renderCities();">
+      <select onchange="updateTransition('${tid}','mode',this.value)">
         ${TRANSITION_MODES.map(m => `<option value="${m.id}"${t.mode===m.id?' selected':''}>${m.icon} ${m.label}</option>`).join('')}
       </select>
     </label>
@@ -5814,35 +5988,38 @@ function buildTransitionRow(city, t) {
         <option value="booked"${t.status==='booked'?' selected':''}>Booked</option>
       </select>
     </label>
+    <label>From
+      <input type="text" value="${escapeHTML(t.fromCity || (state.cities.find(c=>c.id===t.cityId)||{}).name || '')}" placeholder="Departing from" onchange="updateTransition('${tid}','fromCity',this.value)">
+    </label>
     <label>To city
-      <input type="text" value="${escapeHTML(t.toCity||'')}" placeholder="e.g. Atlanta" oninput="updateTransition('${tid}','toCity',this.value)">
+      <input type="text" value="${escapeHTML(t.toCity||'')}" placeholder="e.g. Atlanta" onchange="updateTransition('${tid}','toCity',this.value)">
     </label>
     <label>Carrier
-      <input type="text" value="${escapeHTML(t.carrier||'')}" placeholder="United, Renfe, Royal Caribbean…" oninput="updateTransition('${tid}','carrier',this.value)">
+      <input type="text" value="${escapeHTML(t.carrier||'')}" placeholder="United, Renfe, Royal Caribbean…" onchange="updateTransition('${tid}','carrier',this.value)">
     </label>
     <label>Number / name
-      <input type="text" value="${escapeHTML(t.number||'')}" placeholder="UA456 or voyage name" oninput="updateTransition('${tid}','number',this.value)">
+      <input type="text" value="${escapeHTML(t.number||'')}" placeholder="UA456 or voyage name" onchange="updateTransition('${tid}','number',this.value)">
     </label>
     <label>Confirmation
-      <input type="text" value="${escapeHTML(t.confirmation||'')}" placeholder="ABC123" oninput="updateTransition('${tid}','confirmation',this.value)">
+      <input type="text" value="${escapeHTML(t.confirmation||'')}" placeholder="ABC123" onchange="updateTransition('${tid}','confirmation',this.value)">
     </label>
     <label>Departure date
-      <input type="date" value="${t.departureDate||''}" oninput="updateTransition('${tid}','departureDate',this.value)">
+      <input type="date" value="${t.departureDate||''}" onchange="updateTransition('${tid}','departureDate',this.value)">
     </label>
     <label>Departure time
-      <input type="time" value="${t.departureTime||''}" oninput="updateTransition('${tid}','departureTime',this.value)">
+      <input type="time" value="${t.departureTime||''}" onchange="updateTransition('${tid}','departureTime',this.value)">
     </label>
     <label>Arrival date
-      <input type="date" value="${t.arrivalDate||''}" oninput="updateTransition('${tid}','arrivalDate',this.value)">
+      <input type="date" value="${t.arrivalDate||''}" onchange="updateTransition('${tid}','arrivalDate',this.value)">
     </label>
     <label>Arrival time
-      <input type="time" value="${t.arrivalTime||''}" oninput="updateTransition('${tid}','arrivalTime',this.value)">
+      <input type="time" value="${t.arrivalTime||''}" onchange="updateTransition('${tid}','arrivalTime',this.value)">
     </label>
     <label>Cost
-      <input type="number" min="0" step="1" value="${t.cost||''}" placeholder="0" oninput="updateTransition('${tid}','cost',this.value)">
+      <input type="number" min="0" step="1" value="${t.cost||''}" placeholder="0" onchange="updateTransition('${tid}','cost',this.value)">
     </label>
     <label>Booking link
-      <input type="url" value="${escapeHTML(t.link||'')}" placeholder="https://…" oninput="updateTransition('${tid}','link',this.value)">
+      <input type="url" value="${escapeHTML(t.link||'')}" placeholder="https://…" onchange="updateTransition('${tid}','link',this.value)">
     </label>
   `;
   body.appendChild(grid);
@@ -5850,7 +6027,7 @@ function buildTransitionRow(city, t) {
   // Notes (full width)
   const notes = document.createElement('label');
   notes.className = 'transit-notes';
-  notes.innerHTML = `Notes (admin only — not shown in family share)<textarea rows="2" placeholder="Layover info, terminal, etc." oninput="updateTransition('${tid}','notes',this.value)">${escapeHTML(t.notes||'')}</textarea>`;
+  notes.innerHTML = `Notes (admin only — not shown in family share)<textarea rows="2" placeholder="Layover info, terminal, etc." onchange="updateTransition('${tid}','notes',this.value)">${escapeHTML(t.notes||'')}</textarea>`;
   body.appendChild(notes);
 
   // Delete button
@@ -7638,6 +7815,7 @@ function renderAll() {
   renderSettings();
   renderMap();
   renderBackupFreshness();
+  renderPublishFreshness();
 }
 
 // ==================== DRAG-AND-DROP IMPORT ====================
