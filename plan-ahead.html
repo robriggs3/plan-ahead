@@ -565,7 +565,12 @@
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
   }
   .accom-row1 {
-    display: grid; grid-template-columns: 2fr auto auto auto; gap: 12px; align-items: center;
+    display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 12px; align-items: center;
+  }
+  /* Date range on a stay header — mirrors the leg's right-aligned date placement */
+  .accom-summary-date {
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3);
+    letter-spacing: 0.02em; white-space: nowrap; text-align: right;
   }
   .accom-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-light); }
   .accom-name {
@@ -1536,7 +1541,7 @@
 const STORAGE_KEY = 'planahead:v1';
 // Build stamp — bump when shipping. Shown in the footer + logged to console so you can
 // confirm at a glance which code your browser is actually running (rules out stale cache).
-const BUILD = '2026.06.30-3';
+const BUILD = '2026.06.30-5';
 const SNAPSHOTS_KEY = 'planahead:v1:snapshots';
 const MAX_AUTO_SNAPSHOTS = 7;    // daily auto rolling — about a week
 const MAX_MANUAL_SNAPSHOTS = 10; // generous cap for user snapshots
@@ -3595,6 +3600,15 @@ function buildAccommodation(city, acc) {
   renderLinkRow();
   nameWrap.appendChild(linkRow);
   row1.appendChild(nameWrap);
+
+  // Date range — same right-aligned placement as a leg's date. Time isn't tracked for stays,
+  // so this shows dates only; updates automatically when check-in/out are edited (full re-render).
+  const dateChip = document.createElement('div');
+  dateChip.className = 'accom-summary-date';
+  if (acc.checkIn && acc.checkOut) dateChip.textContent = fmtDate(acc.checkIn) + ' → ' + fmtDate(acc.checkOut);
+  else if (acc.checkIn) dateChip.textContent = fmtDate(acc.checkIn) + ' → ?';
+  else dateChip.innerHTML = '<span class="muted">— no dates —</span>';
+  row1.appendChild(dateChip);
 
   // Status pill / select
   const statusSel = document.createElement('select');
@@ -6024,6 +6038,9 @@ function buildTransitionRow(city, t) {
     '<span class="transit-summary-text">' + escapeHTML(summaryLine) + ' · ' + escapeHTML(fromLabel || '?') + ' → ' + escapeHTML(t.toCity || '?') + '</span>' +
     '<span class="transit-summary-date">' + dateBit + '</span>' +
     (t.cost && Number(t.cost) > 0 ? '<span class="transit-summary-cost">' + escapeHTML(fmtCurrency(Number(t.cost), t.currency || 'USD')) + '</span>' : '') +
+    '<select class="leg-status-mini accom-mini-field" onclick="event.stopPropagation()" onchange="updateTransition(\'' + tid + '\',\'status\',this.value)">' +
+      ['tentative','shortlisted','booked'].map(s => '<option value="' + s + '"' + (t.status === s ? ' selected' : '') + '>' + s.charAt(0).toUpperCase() + s.slice(1) + '</option>').join('') +
+    '</select>' +
     '<span class="transit-chev" style="margin-left:8px;color:var(--text-3);font-size:11px;transition:transform 0.2s;transform:rotate(' + (isOpen ? '0' : '-90') + 'deg)">▾</span>';
 
   // Body wraps the editor + notes + delete — toggled by clicking the summary
@@ -6038,13 +6055,6 @@ function buildTransitionRow(city, t) {
     <label>Mode
       <select onchange="updateTransition('${tid}','mode',this.value)">
         ${TRANSITION_MODES.map(m => `<option value="${m.id}"${t.mode===m.id?' selected':''}>${m.icon} ${m.label}</option>`).join('')}
-      </select>
-    </label>
-    <label>Status
-      <select onchange="updateTransition('${tid}','status',this.value)">
-        <option value="tentative"${t.status==='tentative'?' selected':''}>Tentative</option>
-        <option value="shortlisted"${t.status==='shortlisted'?' selected':''}>Shortlisted</option>
-        <option value="booked"${t.status==='booked'?' selected':''}>Booked</option>
       </select>
     </label>
     <label>From
@@ -6076,9 +6086,6 @@ function buildTransitionRow(city, t) {
     </label>
     <label>Cost
       <input type="number" min="0" step="1" value="${t.cost||''}" placeholder="0" onchange="updateTransition('${tid}','cost',this.value)">
-    </label>
-    <label>Booking link
-      <input type="url" value="${escapeHTML(t.link||'')}" placeholder="https://…" onchange="updateTransition('${tid}','link',this.value)">
     </label>
   `;
   body.appendChild(grid);
@@ -6112,7 +6119,51 @@ function buildTransitionRow(city, t) {
     }
   });
 
+  // Booking link — same chip / "+ Add booking link" UI as accommodations, shown in the
+  // always-visible header area (below the summary line). Lives here rather than the expanded
+  // grid so it matches the stay format and is reachable without opening the editor.
+  const legLink = document.createElement('div');
+  legLink.style.cssText = 'font-size:12px;margin-top:8px;padding-left:28px;display:flex;align-items:center;gap:6px;flex-wrap:wrap';
+  function renderLegLinkRow() {
+    legLink.innerHTML = '';
+    const link = t.link || '';
+    if (link) {
+      let domain = link;
+      try { domain = new URL(link).hostname.replace(/^www\./, ''); } catch(e) {}
+      const open = document.createElement('a');
+      open.href = link; open.target = '_blank'; open.rel = 'noopener'; open.title = link;
+      open.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--accent-soft,#f3f0e8);color:var(--accent);border-radius:4px;font-size:11px;text-decoration:none;font-family:\'JetBrains Mono\',monospace;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      open.textContent = '🔗 ' + domain;
+      legLink.appendChild(open);
+
+      const edit = document.createElement('button');
+      edit.className = 'icon-btn'; edit.textContent = '✎'; edit.title = 'Edit link';
+      edit.style.cssText = 'background:transparent;border:none;color:var(--text-3);cursor:pointer;padding:2px 4px;font-size:13px';
+      edit.onclick = (e) => { e.stopPropagation(); editLegLink(); };
+      legLink.appendChild(edit);
+
+      const rem = document.createElement('button');
+      rem.className = 'icon-btn'; rem.textContent = '✕'; rem.title = 'Remove link';
+      rem.style.cssText = 'background:transparent;border:none;color:var(--text-3);cursor:pointer;padding:2px 4px;font-size:11px';
+      rem.onclick = (e) => { e.stopPropagation(); updateTransition(tid, 'link', ''); };
+      legLink.appendChild(rem);
+    } else {
+      const addBtn = document.createElement('button');
+      addBtn.className = 'icon-btn';
+      addBtn.textContent = '+ Add booking link';
+      addBtn.style.cssText = 'background:transparent;border:1px dashed var(--border);color:var(--text-3);cursor:pointer;padding:3px 8px;font-size:11px;border-radius:4px;font-family:\'JetBrains Mono\',monospace';
+      addBtn.onclick = (e) => { e.stopPropagation(); editLegLink(); };
+      legLink.appendChild(addBtn);
+    }
+  }
+  function editLegLink() {
+    const updated = prompt('Booking link (airline, rail, ferry, bus, etc.):', t.link || '');
+    if (updated !== null) updateTransition(tid, 'link', updated.trim());
+  }
+  renderLegLinkRow();
+
   item.appendChild(summary);
+  item.appendChild(legLink);
   item.appendChild(body);
   return item;
 }
