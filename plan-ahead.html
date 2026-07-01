@@ -1541,7 +1541,7 @@
 const STORAGE_KEY = 'planahead:v1';
 // Build stamp — bump when shipping. Shown in the footer + logged to console so you can
 // confirm at a glance which code your browser is actually running (rules out stale cache).
-const BUILD = '2026.06.30-8';
+const BUILD = '2026.06.30-9';
 const SNAPSHOTS_KEY = 'planahead:v1:snapshots';
 const MAX_AUTO_SNAPSHOTS = 7;    // daily auto rolling — about a week
 const MAX_MANUAL_SNAPSHOTS = 10; // generous cap for user snapshots
@@ -2484,11 +2484,10 @@ function renderNow() {
         if (oc.includes('demoteCity') || oc.includes('deleteCity')) btn.remove();
       });
       elevatedContainer.appendChild(card);
-      // Outbound transit at-a-glance — only when the elevated card is COLLAPSED. When it's
-      // expanded, the merged Stay & Travel timeline already lists every leg with full editors,
-      // so showing the mini-cards too would duplicate them.
+      // At-a-glance under a COLLAPSED card: only the legs that LEAVE this city (departing on/after
+      // its final date). Internal hops are hidden here — they show in the timeline when expanded.
       if (!openCityIds.has(current.id)) {
-        transitionsForCity(current.id).forEach(t => elevatedContainer.appendChild(buildAdminTransitMini(t)));
+        exitLegsForCity(current).forEach(t => elevatedContainer.appendChild(buildAdminTransitMini(t)));
       }
     } else {
       // Hide section when no current city
@@ -2784,8 +2783,11 @@ function renderCities() {
       container.appendChild(
         renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), false)
       );
-      // After each city, render its outbound travel legs as compact summary cards
-      transitionsForCity(city.id).forEach(t => container.appendChild(buildAdminTransitMini(t)));
+      // Under each COLLAPSED city, show only its exit legs as compact cards (the timeline
+      // inside the expanded card covers everything, so hide these when open).
+      if (!openCityIds.has(city.id)) {
+        exitLegsForCity(city).forEach(t => container.appendChild(buildAdminTransitMini(t)));
+      }
     });
   };
 
@@ -2802,7 +2804,9 @@ function renderCities() {
       container.appendChild(
         renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), true)
       );
-      transitionsForCity(city.id).forEach(t => container.appendChild(buildAdminTransitMini(t)));
+      if (!openCityIds.has(city.id)) {
+        exitLegsForCity(city).forEach(t => container.appendChild(buildAdminTransitMini(t)));
+      }
     });
   }
   else if (activeFilter === 'eliminated') {
@@ -2818,7 +2822,9 @@ function renderCities() {
         card.style.opacity = '0.55';
         card.style.filter = 'grayscale(60%)';
         container.appendChild(card);
-        transitionsForCity(city.id).forEach(t => container.appendChild(buildAdminTransitMini(t)));
+        if (!openCityIds.has(city.id)) {
+          exitLegsForCity(city).forEach(t => container.appendChild(buildAdminTransitMini(t)));
+        }
       });
     }
   }
@@ -2850,7 +2856,9 @@ function renderPastTravel() {
   list.innerHTML = '';
   past.forEach(city => {
     list.appendChild(renderCityCard(city, issueCityIds.has(city.id), alertCityIds.has(city.id), true));
-    transitionsForCity(city.id).forEach(t => list.appendChild(buildAdminTransitMini(t)));
+    if (!openCityIds.has(city.id)) {
+      exitLegsForCity(city).forEach(t => list.appendChild(buildAdminTransitMini(t)));
+    }
   });
 }
 
@@ -5861,6 +5869,21 @@ function transitionLabel(mode) {
 
 function transitionsForCity(cityId) {
   return (state.transitions || []).filter(t => t.cityId === cityId);
+}
+
+// The "how you leave here" legs: those departing on/after the city's final (check-out) date,
+// sorted chronologically. Shown as at-a-glance mini-cards under a COLLAPSED city; the earlier
+// internal hops stay hidden until the card is expanded (where the full timeline lists them).
+function exitLegsForCity(city) {
+  if (!city) return [];
+  const legs = transitionsForCity(city.id);
+  const co = city.checkOut || '';
+  const filtered = co ? legs.filter(t => t.departureDate && t.departureDate >= co) : legs;
+  return filtered.sort((a, b) => {
+    const ak = (a.departureDate || '') + 'T' + (a.departureTime || '99:99');
+    const bk = (b.departureDate || '') + 'T' + (b.departureTime || '99:99');
+    return ak < bk ? -1 : (ak > bk ? 1 : 0);
+  });
 }
 
 // Sum of booked transit-leg costs attributed to this city. Used in city headers,
