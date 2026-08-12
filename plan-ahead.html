@@ -1131,6 +1131,35 @@
      affordance rules only.
      ================================================================== */
 
+  /* --- Collapsible section headers (cityops .sec-toggle) ---------------
+     The page is ~8,800px tall on a phone with the current city auto-expanded,
+     with no landmarks to navigate by. Making each top-level section collapse
+     to its header turns the page into a short index you can scan. */
+  .sec-toggle {
+    font: inherit; color: inherit; background: none; border: none; padding: 0;
+    display: flex; align-items: center; gap: 8px; cursor: pointer; text-align: left;
+  }
+  .sec-toggle .chev {
+    color: var(--text-3); font-size: 14px; line-height: 1; width: 15px; flex: 0 0 auto;
+    transition: transform 0.2s;
+  }
+  .section.collapsed .sec-toggle .chev { transform: rotate(-90deg); }
+  .sec-toggle:hover .chev { color: var(--accent); }
+  /* !important is load-bearing: several of these children (#view-list-wrap,
+     #view-board-wrap, #status-cost-row) carry an inline display set by applyView()
+     and the renderers, which would otherwise win over the collapse rule. */
+  .section.collapsed > *:not(.section-head) { display: none !important; }
+  .section.collapsed .section-head .actions,
+  .section.collapsed .section-head .view-controls { display: none !important; }
+  .section.collapsed { margin-bottom: 20px; }
+  .section.collapsed .section-head {
+    margin-bottom: 0; border-bottom-color: var(--border-light);
+  }
+  /* Expand / collapse everything: one control, above the first section. */
+  .sec-allbar {
+    display: flex; justify-content: flex-end; gap: 8px; margin: -16px 0 20px;
+  }
+
   /* --- Board card actions on touch (cityops always-visible .ctl-row) ----
      These were display:none until :hover, so on a phone the per-card edit and
      delete controls could never be reached at all. */
@@ -1157,6 +1186,7 @@
     .map-reset-btn { min-height: 38px; padding: 8px 12px; }
     .setting-card input[type="radio"], .modal input[type="checkbox"] { width: 20px; height: 20px; }
     .setting-radio-row label { display: flex; align-items: center; min-height: 40px; }
+    .sec-toggle { min-height: 44px; }
     /* Keep a destructive control from sitting flush against its neighbour. */
     .idea-actions .icon-btn.delete, .accom-actions .icon-btn.delete { margin-left: 6px; }
   }
@@ -8153,6 +8183,116 @@ function renderAll() {
   renderPublishFreshness();
 }
 
+// ==================== COLLAPSIBLE SECTIONS ====================
+// Borrowed from cityops (.sec-toggle): each top-level section collapses to its
+// header so the page reads as a short index instead of nine screens of blind
+// scrolling on a phone.
+//
+// Collapse state is a VIEW preference, not data. It lives in its own localStorage
+// key and is never written into `state` / `planahead:v1`, so it can never end up in
+// an export, an import, a snapshot, or the family share file.
+const UI_PREFS_KEY = 'planahead:ui:v1';
+
+function loadUIPrefs() {
+  try {
+    const raw = localStorage.getItem(UI_PREFS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (e) { return {}; }
+}
+
+function saveUIPrefs(prefs) {
+  // Never let a view preference break the app: a failed write just means the
+  // section reopens next load.
+  try { localStorage.setItem(UI_PREFS_KEY, JSON.stringify(prefs)); } catch (e) {}
+}
+
+function sectionKey(label) {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function setSectionCollapsed(section, collapsed, persist) {
+  section.classList.toggle('collapsed', collapsed);
+  const btn = section.querySelector('.sec-toggle');
+  if (btn) btn.setAttribute('aria-expanded', String(!collapsed));
+  // Leaflet renders into a zero-size container while hidden: tiles come back blank and
+  // the fitBounds it computed while collapsed is against a 0x0 viewport. Remeasure and
+  // re-fit on expand. resetMapView() is view-only (no state writes).
+  if (!collapsed && section.querySelector('#map') && typeof _map !== 'undefined' && _map) {
+    setTimeout(() => {
+      try { _map.invalidateSize(); resetMapView(); } catch (e) {}
+    }, 0);
+  }
+  if (persist) {
+    const prefs = loadUIPrefs();
+    if (!prefs.collapsed) prefs.collapsed = {};
+    const key = section.getAttribute('data-sec-key');
+    if (collapsed) prefs.collapsed[key] = true; else delete prefs.collapsed[key];
+    saveUIPrefs(prefs);
+  }
+}
+
+function initCollapsibleSections() {
+  const prefs = loadUIPrefs();
+  const collapsedMap = prefs.collapsed || {};
+  const sections = document.querySelectorAll('.wrap > section.section');
+  sections.forEach(section => {
+    const h2 = section.querySelector('.section-head h2');
+    if (!h2 || section.hasAttribute('data-sec-key')) return;
+    const label = h2.textContent.trim();
+    const key = sectionKey(label);
+    section.setAttribute('data-sec-key', key);
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sec-toggle';
+    btn.setAttribute('aria-expanded', 'true');
+    const chev = document.createElement('span');
+    chev.className = 'chev';
+    chev.textContent = '▾';
+    chev.setAttribute('aria-hidden', 'true');
+    const txt = document.createElement('span');
+    txt.textContent = label;
+    btn.appendChild(chev);
+    btn.appendChild(txt);
+    h2.textContent = '';
+    h2.appendChild(btn);
+
+    btn.addEventListener('click', () => {
+      setSectionCollapsed(section, !section.classList.contains('collapsed'), true);
+    });
+
+    if (collapsedMap[key]) setSectionCollapsed(section, true, false);
+  });
+
+  // One control to turn the whole page into an index and back again.
+  const hero = document.querySelector('.wrap > header.hero');
+  if (hero && !document.getElementById('sec-allbar')) {
+    const bar = document.createElement('div');
+    bar.className = 'sec-allbar';
+    bar.id = 'sec-allbar';
+    const toggleAll = document.createElement('button');
+    toggleAll.type = 'button';
+    toggleAll.className = 'btn-secondary';
+    const sync = () => {
+      const anyOpen = [...document.querySelectorAll('.wrap > section.section[data-sec-key]')]
+        .some(s => !s.classList.contains('collapsed'));
+      toggleAll.textContent = anyOpen ? 'Collapse all' : 'Expand all';
+    };
+    toggleAll.addEventListener('click', () => {
+      const all = [...document.querySelectorAll('.wrap > section.section[data-sec-key]')];
+      const collapse = all.some(s => !s.classList.contains('collapsed'));
+      all.forEach(s => setSectionCollapsed(s, collapse, true));
+      sync();
+    });
+    document.querySelectorAll('.wrap > section.section .sec-toggle')
+      .forEach(b => b.addEventListener('click', () => setTimeout(sync, 0)));
+    sync();
+    bar.appendChild(toggleAll);
+    hero.insertAdjacentElement('afterend', bar);
+  }
+}
+
 // ==================== DRAG-AND-DROP IMPORT ====================
 // Drop a .json file anywhere on the page to trigger the import flow.
 // Reuses applyImportedJSON() so the same safety-snapshot, sanity-check, and
@@ -8234,6 +8374,7 @@ setupProfile();
 // added/removed/eliminated since the last edit of any given city.
 recomputeGlobalScores();
 renderAll();
+initCollapsibleSections();  // section headers become toggles; prefs live in their own LS key
 startHeroTick();  // keeps the displayed time live (refreshes every 60s)
 
 // Build stamp: surface which code is actually running (footer + console) so a stale
