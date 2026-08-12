@@ -89,8 +89,12 @@
     text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: background 0.15s;
   }
   .btn:hover { background: var(--accent); }
+  /* Labelled pill control (cityops .ctl language, plan-ahead tokens). The old resting
+     style was bg-soft gray on a gray page, which made every live button look disabled;
+     and the affordance only appeared on :hover, which does not exist on touch. White fill
+     plus accent text plus a real border reads as pressable without needing a pointer. */
   .btn-secondary {
-    background: var(--bg-soft); color: var(--text-2); border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg-card); color: var(--accent-hover); border: 1.5px solid var(--border); border-radius: 6px;
     padding: 6px 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px;
     text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; transition: all 0.15s;
   }
@@ -706,7 +710,14 @@
   .modal {
     background: var(--bg-card); border-radius: 12px; padding: 24px;
     max-width: 700px; width: calc(100% - 32px); max-height: 80vh; overflow-y: auto;
+    /* .modal-bg is a flex container, so without min-width:0 the modal's min-content
+       width beats width:calc(100% - 32px). A long action label (e.g. "Score objective
+       (Schengen + Proximity + Climate)") then pushed the box past a 375px viewport and
+       clipped the score column off-screen. */
+    min-width: 0;
   }
+  /* Long labels wrap instead of setting the modal's minimum width. */
+  .modal-actions .btn, .modal-actions .btn-secondary { white-space: normal; max-width: 100%; }
   .modal h3 {
     font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500;
     margin-bottom: 12px;
@@ -1113,6 +1124,84 @@
     margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light);
   }
   @media (max-width: 720px) { .latlng-row { grid-template-columns: 1fr; } }
+
+  /* ==================================================================
+     UX PASS: patterns borrowed from cityops (src/cityops.css).
+     Palette and typography are unchanged; these are layout, density and
+     affordance rules only.
+     ================================================================== */
+
+  /* --- Board card actions on touch (cityops always-visible .ctl-row) ----
+     These were display:none until :hover, so on a phone the per-card edit and
+     delete controls could never be reached at all. */
+  @media (hover: none), (pointer: coarse) {
+    .board-card-actions { display: flex; position: static; margin-bottom: 6px; justify-content: flex-end; }
+    .board-card-actions button { min-height: 36px; padding: 6px 14px; font-size: 13px; }
+  }
+
+  /* --- Touch tap targets ----------------------------------------------
+     Measured 23x22px on the 10 delete buttons and 25px tall on every
+     .btn-secondary / .filter-pill / select. Bring the whole interactive
+     layer up to a thumb-sized minimum without changing any desktop metrics. */
+  @media (hover: none), (pointer: coarse) {
+    .icon-btn {
+      min-width: 40px; min-height: 40px; padding: 8px 10px; font-size: 16px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .btn-secondary { min-height: 40px; padding: 10px 14px; }
+    .btn { min-height: 44px; padding: 12px 18px; }
+    .filter-pill { min-height: 38px; padding: 8px 14px; }
+    .select-input, .date-input, .text-input, .num-input { min-height: 40px; }
+    .field-input, .accom-mini-field { min-height: 38px; }
+    .view-toggle button { min-height: 38px; padding: 8px 16px; }
+    .map-reset-btn { min-height: 38px; padding: 8px 12px; }
+    .setting-card input[type="radio"], .modal input[type="checkbox"] { width: 20px; height: 20px; }
+    .setting-radio-row label { display: flex; align-items: center; min-height: 40px; }
+    /* Keep a destructive control from sitting flush against its neighbour. */
+    .idea-actions .icon-btn.delete, .accom-actions .icon-btn.delete { margin-left: 6px; }
+  }
+
+  /* --- Horizontal overflow in the city block header --------------------
+     "⚡ Score stays" + "+ Add stay" + "+ Add travel leg" total ~390px inside a
+     283px card, and .city-block-actions is flex-shrink:0 with no wrap, so it
+     pushed ~110px of horizontal scroll onto the WHOLE page at 375px. Letting the
+     buttons wrap is the whole fix. */
+  .city-block-actions { flex-wrap: wrap; }
+
+  /* --- Narrow-phone density (cityops 430px tier) -----------------------
+     Only breakpoints were 720/880/900px, so a 375px screen still paid 24px of
+     side padding and a 56px display headline before any data. */
+  @media (max-width: 430px) {
+    .wrap { padding: 18px 12px 56px; }
+    .hero { margin-bottom: 24px; gap: 12px; }
+    .hero-left h1 { font-size: 38px; }
+    .hero-left .sub { font-size: 13px; }
+    .hero-right { text-align: left; font-size: 12px; }
+    .section { margin-bottom: 28px; }
+    .section-head { margin-bottom: 12px; gap: 8px; }
+    .section-head h2 { font-size: 19px; }
+    .counter-card, .counter-group-card { padding: 14px; }
+    .city-header { padding: 14px 14px; }
+    .city-body { padding: 0 14px 16px; }
+    .city-name { font-size: 19px; }
+    .setting-card { padding: 14px; }
+    .city-block { padding: 14px; }
+    .city-block-header { gap: 8px; }
+    .city-block-actions { margin-left: 0; width: 100%; }
+    .modal { padding: 18px 14px; width: calc(100% - 16px); }
+    .modal h3 { font-size: 19px; }
+    .map-container { height: 320px; }
+    /* The legend covered roughly a third of the map and sat on top of the pins.
+       As a translucent strip across the bottom it hides one thin band instead. */
+    .map-legend {
+      left: 8px; right: 8px; bottom: 8px;
+      flex-direction: row; flex-wrap: wrap; justify-content: center;
+      gap: 4px 12px; font-size: 9px; padding: 6px 8px;
+      background: rgba(255,255,255,0.92);
+    }
+    .map-legend .dot { width: 8px; height: 8px; margin-right: 4px; }
+    .footer { margin-top: 36px; }
+  }
 </style>
 </head>
 <body>
