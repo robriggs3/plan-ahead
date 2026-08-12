@@ -4682,6 +4682,13 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .pill.booked { background: var(--green-soft); color: var(--green); }
 .pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
 .pill.tentative { background: var(--amber-soft); color: var(--amber); }
+/* City guide cross-link to cityops (same pill vocabulary as .pill, outline instead of fill) */
+.guide-link { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; font-weight: 500; display: inline-block; margin-left: 8px; vertical-align: middle; white-space: nowrap; }
+.guide-link:hover { background: var(--accent-soft); }
+.current-banner .dates .guide-link { margin-left: 10px; }
+.hero .sub-links { margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
+.hero .sub-links a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+.hero .sub-links a:hover { border-bottom-color: var(--accent); }
 .map-wrap { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 8px; }
 #map { height: 420px; z-index: 1; }
 .map-reset-btn { position: absolute; top: 10px; left: 52px; z-index: 1000; background: white; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; padding: 5px 10px; font-size: 11px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.15s; }
@@ -4704,17 +4711,32 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
 footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(--text-3); border-radius: 3px; margin-bottom: 10px; }
 @media (max-width: 600px) {
-  body { padding: 24px 14px 50px; }
-  .hero { padding-top: 56px; }
+  body { padding: 20px 14px 40px; }
+  .hero { padding: 48px 0 18px; margin-bottom: 24px; }
   .hero h1 { font-size: 38px; }
   .hero .gen-date { position: static; display: block; margin-top: 8px; }
-  .current-banner { padding: 36px 20px 20px; }
+  .current-banner { padding: 34px 16px 18px; margin-bottom: 24px; }
   .current-banner h2 { font-size: 24px; }
   .current-banner h2 .country { display: block; margin: 4px 0 0; }
+  .current-banner .accom-block { margin-top: 14px; padding-top: 12px; }
+  .section-head { margin: 28px 0 14px; }
   .section-head h2 { font-size: 22px; }
+  .leg { padding: 14px 16px; }
   .leg-title { font-size: 17px; }
   .leg-title .country { display: block; margin: 4px 0 0; }
-  #map { height: 320px; }
+  .leg-accom { margin-top: 10px; padding-top: 10px; }
+  .accom-item { padding: 9px 10px; }
+  #map { height: 260px; }
+  /* Narrow-screen transit card: airline + number, then date/times, then the route on one
+     compact line. Rebuilt as a grid so the three rows can be ordered independently of the
+     DOM order (which stays as-is for the desktop flex layout). */
+  .transit { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; row-gap: 2px; align-items: start; margin: 6px 0 6px 10px; padding: 9px 11px; }
+  .transit.indent { margin-left: 14px; }
+  .transit-main { display: contents; }
+  .transit-ic { grid-column: 1; grid-row: 1 / span 3; padding-top: 1px; }
+  .transit-line1 { grid-column: 2; grid-row: 1; min-width: 0; }
+  .transit-time { grid-column: 2; grid-row: 2; white-space: normal; }
+  .transit-line2 { grid-column: 2; grid-row: 3; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 </style>
 </head>
@@ -4724,6 +4746,7 @@ footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(
     <div class="gen-date" id="gen-date"></div>
     <h1>${escapeHTML(payload.travelerName)} · <span class="em">on the move</span></h1>
     <div class="sub" id="cover-meta">Loading…</div>
+    <div class="sub-links">City guides: <a href="https://cityops.robriggs.com" target="_blank" rel="noopener">cityops.robriggs.com</a></div>
   </header>
 
   <div id="current-section"></div>
@@ -4754,6 +4777,23 @@ function fmtDate(iso) {
 
 function escapeHTML(s) {
   return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// cityops cross-link. Slug MUST match cityops's own slug function exactly, or the deep link
+// lands on nothing: lowercase, every non-alphanumeric run becomes one hyphen, trim hyphens.
+const CITYOPS_BASE = 'https://cityops.robriggs.com';
+
+function citySlug(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+// Guide pill for one stop. Only rendered when we have both a name and a from-date, and only
+// for the current stop and upcoming stops (past stops get nothing).
+function cityGuideLink(name, fromISO) {
+  const slug = citySlug(name);
+  if (!slug || !fromISO) return '';
+  const href = CITYOPS_BASE + '/#city=' + encodeURIComponent(slug + '-' + fromISO);
+  return '<a class="guide-link" href="' + escapeHTML(href) + '" target="_blank" rel="noopener">City guide ↗</a>';
 }
 
 // Status -> marker color (mirrors itinerary pill colors). Past trumps status (gray). Current trumps everything (red).
@@ -4876,7 +4916,7 @@ function render() {
     const timelineHTML = timeline
       ? '<div class="accom-block"><div class="accom-label">Stay &amp; travel</div>' + timeline + '</div>'
       : '';
-    cs.innerHTML = '<div class="current-banner"><div class="you-are-here-badge">● ' + escapeHTML(TRAVELER) + ' is here</div><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span></div>' + timelineHTML + '</div>';
+    cs.innerHTML = '<div class="current-banner"><div class="you-are-here-badge">● ' + escapeHTML(TRAVELER) + ' is here</div><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span>' + cityGuideLink(current.name, current.checkIn) + '</div>' + timelineHTML + '</div>';
   } else {
     cs.innerHTML = '<div class="current-banner" style="border-color:var(--border);box-shadow:var(--shadow-sm);padding-top:24px"><div style="text-align:center;color:var(--text-3);font-style:italic;font-family:Fraunces,serif;font-size:18px">Between stays — see upcoming below</div></div>';
   }
@@ -4912,7 +4952,7 @@ function render() {
 function buildLeg(c, isPast) {
   const cls = isPast ? 'leg past' : 'leg';
   const timeline = buildStayTravelTimeline(c, false);
-  return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div></div>' + (timeline ? '<div class="leg-accom">' + timeline + '</div>' : '') + '</div>';
+  return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + (isPast ? '' : cityGuideLink(c.name, c.checkIn)) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div></div>' + (timeline ? '<div class="leg-accom">' + timeline + '</div>' : '') + '</div>';
 }
 
 // Icon mapper for transit modes (must match the admin app's TRANSITION_MODES)
