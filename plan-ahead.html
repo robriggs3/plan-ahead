@@ -4094,7 +4094,7 @@ function openCityResearchModal(city) {
     );
     if (!proceed) {
       // Scroll to profile section
-      document.querySelector('#profile-area')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      revealForScroll(document.querySelector('#profile-area'))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       document.querySelector('#profile-area')?.focus();
       return;
     }
@@ -6150,10 +6150,10 @@ function buildAdminTransitMini(t) {
     setTimeout(() => {
       const transitEl = document.querySelector('[data-city-transit-id="' + t.cityId + '"]');
       if (transitEl) {
-        transitEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        revealForScroll(transitEl).scrollIntoView({ behavior: 'smooth', block: 'center' });
       } else {
         const cityEl = document.querySelector('[data-city-id="' + t.cityId + '"]');
-        if (cityEl) cityEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (cityEl) revealForScroll(cityEl).scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }, 120);
   };
@@ -6540,7 +6540,7 @@ function promoteIdea(id) {
     document.querySelectorAll('#city-list .city').forEach(card => {
       const titleEl = card.querySelector('.city-name');
       if (titleEl && titleEl.textContent === city.name) {
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        revealForScroll(card).scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     });
   }, 150);
@@ -7824,7 +7824,7 @@ function openCityFromBoard(cityId) {
       const titleEl = card.querySelector('.city-name');
       const city = state.cities.find(c => c.id === cityId);
       if (city && titleEl && titleEl.textContent === (city.name || '(unnamed)')) {
-        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        revealForScroll(card).scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     });
   }, 100);
@@ -8209,6 +8209,17 @@ function saveUIPrefs(prefs) {
 
 function sectionKey(label) {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+// Scrolling to something inside a collapsed section is a silent no-op; expand
+// the ancestor section first (view-only, does not persist the expansion).
+function revealForScroll(el) {
+  if (!el) return el;
+  const section = el.closest('section.section');
+  if (section && section.classList.contains('collapsed')) {
+    setSectionCollapsed(section, false, false);
+  }
+  return el;
 }
 
 function setSectionCollapsed(section, collapsed, persist) {
