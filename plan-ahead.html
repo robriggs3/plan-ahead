@@ -20,7 +20,10 @@
     --bg-softer: #e8e8e8;
     --text: #242424;
     --text-2: #4a4a4a;
-    --text-3: #666666;
+    /* Was #666666 (3.6:1 on the page's own gray background — fails WCAG AA for
+       normal text). #525252 keeps the same "quiet label" role but reads clearly
+       in daylight, which matters for an app used outdoors while traveling. */
+    --text-3: #525252;
     --accent: #c72027;
     --accent-hover: #9c181d;
     --accent-soft: #f3d1d3;
@@ -36,9 +39,47 @@
     --blue-soft: #d3e0ee;
     --gray: #555555;
     --gray-soft: #d9d9d9;
+    /* Orange existed only as hardcoded hex in the scoring components; tokenized
+       here so it behaves like every other status color. Values unchanged. */
+    --orange: #b06a1e;
+    --orange-soft: #fde0c2;
+    /* "-strong" text variants: the base status colors (amber/green/red/accent/orange)
+       read fine as large counter numbers or icons on white (>=3:1, the AA threshold
+       for large text), but at pill/badge size (11px) on their matching "-soft"
+       background they measure 3.4-4.1:1 — under the 4.5:1 AA minimum for small text.
+       These darker variants are for text ON a "-soft" chip background only; the
+       base colors are unchanged everywhere else (borders, icons, large numerals). */
+    --amber-strong: #6b5500;
+    --green-strong: #235f29;
+    --red-strong: #8a2f26;
+    --accent-strong: #8a161c;
+    --orange-strong: #8a521a;
     --shadow-sm: 0 1px 2px rgba(0,0,0,.08);
     --shadow: 0 2px 8px rgba(0,0,0,.10);
     --shadow-lg: 0 4px 16px rgba(0,0,0,.12);
+
+    /* Spacing scale — the values already in use throughout this file (a 4px
+       rhythm: 4/8/12/16/20/24/32/40/60), named so new rules can reach for a
+       token instead of another one-off number. Existing rules that already use
+       these exact pixel values are left as-is (a mechanical find/replace across
+       1000+ lines would add risk with no visible change); this documents the
+       scale and is applied to the highest-visibility structural rules below. */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+    --space-7: 32px;
+    --space-8: 40px;
+
+    /* Type scale — three families already in consistent use (Fraunces for
+       headings/large numerals, Inter for body/inputs, JetBrains Mono for
+       labels/meta/data). Named sizes for the recurring roles. */
+    --fs-meta: 11px;      /* JetBrains Mono uppercase labels */
+    --fs-body: 15px;      /* Inter running text */
+    --fs-heading: 22px;   /* Fraunces section/city headings */
+    --fs-display: 56px;   /* Fraunces hero numerals (score composite) */
   }
 
   body {
@@ -46,11 +87,17 @@
     background: var(--bg);
     color: var(--text);
     line-height: 1.5;
-    font-size: 15px;
+    font-size: var(--fs-body);
     min-height: 100vh;
+    /* Safety net: one missed flex-wrap or fixed width anywhere in an 8000-line
+       stylesheet can push a sliver of horizontal scroll onto the whole page on
+       a phone (this happened once already, see .city-block-actions below).
+       Nothing in this layout intentionally scrolls sideways except .board-container,
+       which manages its own overflow-x, so clipping at the body level is free. */
+    overflow-x: hidden;
   }
 
-  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: var(--space-7) var(--space-6) 80px; }
 
   /* HERO */
   .hero {
@@ -59,22 +106,22 @@
   }
   .hero-left h1 {
     font-family: 'Fraunces', Georgia, serif;
-    font-size: 56px; line-height: 1; letter-spacing: -0.03em;
+    font-size: var(--fs-display); line-height: 1; letter-spacing: -0.03em;
     font-weight: 500; margin-bottom: 8px;
   }
   .hero-left h1 .accent { color: var(--accent); font-style: italic; }
-  .hero-left .sub { color: var(--text-2); font-size: 15px; }
+  .hero-left .sub { color: var(--text-2); font-size: var(--fs-body); }
   .hero-right { text-align: right; color: var(--text-3); font-size: 13px; font-family: 'JetBrains Mono', monospace; }
   .hero-right .last-session { font-size: 11px; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.08em; }
 
   /* SECTIONS */
-  .section { margin-bottom: 40px; }
+  .section { margin-bottom: var(--space-8); }
   .section-head {
     display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); gap: 12px; flex-wrap: wrap;
+    margin-bottom: var(--space-4); padding-bottom: var(--space-2); border-bottom: 1px solid var(--border); gap: var(--space-3); flex-wrap: wrap;
   }
   .section-head h2 {
-    font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; letter-spacing: -0.01em;
+    font-family: 'Fraunces', Georgia, serif; font-size: var(--fs-heading); font-weight: 500; letter-spacing: -0.01em;
   }
   .section-head .meta {
     font-size: 12px; color: var(--text-3); font-family: 'JetBrains Mono', monospace;
@@ -263,13 +310,15 @@
 
   /* WARNINGS */
   .warnings { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+  /* Text uses the "-strong" variant (not --amber/--red) because this is 13px
+     text on a tinted chip background — see the --*-strong comment in :root. */
   .warning {
     background: var(--amber-soft); border: 1px solid var(--amber); border-radius: 8px;
-    padding: 10px 14px; font-size: 13px; color: var(--amber);
+    padding: 10px 14px; font-size: 13px; color: var(--amber-strong);
     display: flex; gap: 10px; align-items: center;
   }
   .warning.alert {
-    background: var(--red-soft); border-color: var(--red); color: var(--red);
+    background: var(--red-soft); border-color: var(--red); color: var(--red-strong);
   }
   .warning .icon { font-weight: 700; }
 
@@ -297,7 +346,7 @@
   .city-header:hover { background: var(--bg-softer); border-radius: 12px 12px 0 0; }
   .city-title-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .city-name {
-    font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; letter-spacing: -0.01em;
+    font-family: 'Fraunces', Georgia, serif; font-size: var(--fs-heading); font-weight: 500; letter-spacing: -0.01em;
   }
   .city-country {
     font-size: 13px; color: var(--text-3); font-family: 'JetBrains Mono', monospace;
@@ -446,7 +495,7 @@
     padding: 10px 14px; margin-bottom: 12px;
   }
   .uncovered-head {
-    color: var(--amber); font-size: 13px; line-height: 1.4;
+    color: var(--amber-strong); font-size: 13px; line-height: 1.4;
   }
   .uncovered-dates {
     margin-top: 4px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
@@ -486,9 +535,9 @@
     font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
     padding: 1px 6px; border-radius: 3px; font-weight: 500;
   }
-  .transit-mini-pill.booked { background: var(--green-soft); color: var(--green); }
+  .transit-mini-pill.booked { background: var(--green-soft); color: var(--green-strong); }
   .transit-mini-pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
-  .transit-mini-pill.tentative { background: var(--amber-soft); color: var(--amber); }
+  .transit-mini-pill.tentative { background: var(--amber-soft); color: var(--amber-strong); }
   @media (max-width: 720px) {
     .transit-mini { margin-left: 12px; flex-wrap: wrap; }
     .transit-mini-time { width: 100%; margin-top: 4px; }
@@ -621,9 +670,9 @@
   }
   .pill.considering { background: var(--gray-soft); color: var(--gray); }
   .pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
-  .pill.booked, .pill.confirmed { background: var(--green-soft); color: var(--green); }
+  .pill.booked, .pill.confirmed { background: var(--green-soft); color: var(--green-strong); }
   .pill.eliminated, .pill.rejected { background: var(--bg-soft); color: var(--text-3); text-decoration: line-through; }
-  .pill.tentative { background: var(--amber-soft); color: var(--amber); }
+  .pill.tentative { background: var(--amber-soft); color: var(--amber-strong); }
 
   /* IDEAS */
   .idea-add-row {
@@ -945,10 +994,10 @@
     cursor: pointer; user-select: none; transition: opacity 0.15s;
   }
   .score-badge:hover { opacity: 0.85; }
-  .score-badge.green { background: var(--green-soft); color: var(--green); }
-  .score-badge.amber { background: var(--amber-soft); color: var(--amber); }
-  .score-badge.orange { background: #fde0c2; color: #b06a1e; }
-  .score-badge.red { background: var(--red-soft); color: var(--red); }
+  .score-badge.green { background: var(--green-soft); color: var(--green-strong); }
+  .score-badge.amber { background: var(--amber-soft); color: var(--amber-strong); }
+  .score-badge.orange { background: var(--orange-soft); color: var(--orange-strong); }
+  .score-badge.red { background: var(--red-soft); color: var(--red-strong); }
   .score-badge.gray { background: var(--bg-soft); color: var(--text-3); }
 
   .score-modal-content { font-size: 14px; }
@@ -961,11 +1010,11 @@
     text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); margin-bottom: 8px;
   }
   .score-composite .value {
-    font-family: 'Fraunces', Georgia, serif; font-size: 56px; font-weight: 500; line-height: 1;
+    font-family: 'Fraunces', Georgia, serif; font-size: var(--fs-display); font-weight: 500; line-height: 1;
   }
   .score-composite .value.green { color: var(--green); }
   .score-composite .value.amber { color: var(--amber); }
-  .score-composite .value.orange { color: #b06a1e; }
+  .score-composite .value.orange { color: var(--orange); }
   .score-composite .value.red { color: var(--accent); }
   .score-composite .value.gray { color: var(--text-3); }
   .score-composite .sub { color: var(--text-3); font-size: 12px; margin-top: 8px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -986,14 +1035,14 @@
   }
   .score-component .bar.green { background: var(--green); }
   .score-component .bar.amber { background: var(--amber); }
-  .score-component .bar.orange { background: #b06a1e; }
+  .score-component .bar.orange { background: var(--orange); }
   .score-component .bar.red { background: var(--accent); }
   .score-component .num {
     font-family: 'Fraunces', Georgia, serif; font-size: 22px; font-weight: 500; min-width: 50px; text-align: right;
   }
   .score-component .num.green { color: var(--green); }
   .score-component .num.amber { color: var(--amber); }
-  .score-component .num.orange { color: #b06a1e; }
+  .score-component .num.orange { color: var(--orange); }
   .score-component .num.red { color: var(--accent); }
   .score-component .num.gray { color: var(--text-3); font-size: 14px; font-family: 'JetBrains Mono', monospace; }
 
@@ -1189,6 +1238,9 @@
     .sec-toggle { min-height: 44px; }
     /* Keep a destructive control from sitting flush against its neighbour. */
     .idea-actions .icon-btn.delete, .accom-actions .icon-btn.delete { margin-left: 6px; }
+    /* Score badge opens the scoring modal but measured ~21px tall — same fix
+       as the other pill-shaped controls above. */
+    .score-badge { min-height: 36px; padding: 8px 12px; }
   }
 
   /* --- Horizontal overflow in the city block header --------------------
@@ -3692,7 +3744,7 @@ function buildAccommodation(city, acc) {
       const open = document.createElement('a');
       open.href = link; open.target = '_blank'; open.rel = 'noopener';
       open.title = link;
-      open.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--accent-soft,#f3f0e8);color:var(--accent);border-radius:4px;font-size:11px;text-decoration:none;font-family:\'JetBrains Mono\',monospace;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      open.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--accent-soft,#f3f0e8);color:var(--accent-strong,#8a161c);border-radius:4px;font-size:11px;text-decoration:none;font-family:\'JetBrains Mono\',monospace;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
       open.textContent = '🔗 ' + domain;
       linkRow.appendChild(open);
 
@@ -4280,7 +4332,7 @@ function buildSubItem(city, sub, item) {
     const badge = document.createElement('span');
     badge.textContent = '✦ AI';
     badge.title = 'Generated by AI on ' + item.source.slice(3);
-    badge.style.cssText = 'font-family:\'JetBrains Mono\',monospace;font-size:9px;color:var(--accent);background:var(--accent-soft,#fce8e9);padding:2px 5px;border-radius:3px;letter-spacing:0.05em;cursor:help;flex-shrink:0';
+    badge.style.cssText = 'font-family:\'JetBrains Mono\',monospace;font-size:9px;color:var(--accent-strong,#8a161c);background:var(--accent-soft,#fce8e9);padding:2px 5px;border-radius:3px;letter-spacing:0.05em;cursor:help;flex-shrink:0';
     nameRow.appendChild(badge);
   }
 
@@ -5555,7 +5607,7 @@ function previewNotesImport() {
 
   const dupeCount = Object.values(_notesActions).filter((v,i) => v === 'skip').length;
   if (dupeCount > 0) {
-    html += `<div style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--amber)">
+    html += `<div style="background:var(--amber-soft);border:1px solid var(--amber);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--amber-strong)">
       <strong>${dupeCount} duplicate${dupeCount===1?'':'s'} detected.</strong> Choose action per item below.
     </div>`;
   }
@@ -5816,7 +5868,7 @@ function renderSnapshots() {
       : 0;
     const badge = s.isAuto
       ? '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;background:var(--bg-soft);color:var(--text-3);border:1px solid var(--border);padding:1px 5px;border-radius:3px;letter-spacing:0.05em;text-transform:uppercase">AUTO</span>'
-      : '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);padding:1px 5px;border-radius:3px;letter-spacing:0.05em;text-transform:uppercase">MANUAL</span>';
+      : '<span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;background:var(--accent-soft);color:var(--accent-strong);border:1px solid var(--accent);padding:1px 5px;border-radius:3px;letter-spacing:0.05em;text-transform:uppercase">MANUAL</span>';
     // Build summary parts conditionally so zero-counts don't clutter
     const parts = [
       cityCount + ' cit' + (cityCount===1?'y':'ies'),
@@ -6374,7 +6426,7 @@ function buildTransitionRow(city, t) {
       try { domain = new URL(link).hostname.replace(/^www\./, ''); } catch(e) {}
       const open = document.createElement('a');
       open.href = link; open.target = '_blank'; open.rel = 'noopener'; open.title = link;
-      open.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--accent-soft,#f3f0e8);color:var(--accent);border-radius:4px;font-size:11px;text-decoration:none;font-family:\'JetBrains Mono\',monospace;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      open.style.cssText = 'display:inline-flex;align-items:center;gap:4px;padding:2px 8px;background:var(--accent-soft,#f3f0e8);color:var(--accent-strong,#8a161c);border-radius:4px;font-size:11px;text-decoration:none;font-family:\'JetBrains Mono\',monospace;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
       open.textContent = '🔗 ' + domain;
       legLink.appendChild(open);
 
