@@ -20,7 +20,7 @@
     --bg-softer: #e8e8e8;
     --text: #242424;
     --text-2: #4a4a4a;
-    /* Was #666666 (3.6:1 on the page's own gray background — fails WCAG AA for
+    /* Was #666666 (3.6:1 on the page's own gray background, fails WCAG AA for
        normal text). #525252 keeps the same "quiet label" role but reads clearly
        in daylight, which matters for an app used outdoors while traveling. */
     --text-3: #525252;
@@ -46,7 +46,7 @@
     /* "-strong" text variants: the base status colors (amber/green/red/accent/orange)
        read fine as large counter numbers or icons on white (>=3:1, the AA threshold
        for large text), but at pill/badge size (11px) on their matching "-soft"
-       background they measure 3.4-4.1:1 — under the 4.5:1 AA minimum for small text.
+       background they measure 3.4-4.1:1, under the 4.5:1 AA minimum for small text.
        These darker variants are for text ON a "-soft" chip background only; the
        base colors are unchanged everywhere else (borders, icons, large numerals). */
     --amber-strong: #6b5500;
@@ -311,7 +311,7 @@
   /* WARNINGS */
   .warnings { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
   /* Text uses the "-strong" variant (not --amber/--red) because this is 13px
-     text on a tinted chip background — see the --*-strong comment in :root. */
+     text on a tinted chip background, see the --*-strong comment in :root. */
   .warning {
     background: var(--amber-soft); border: 1px solid var(--amber); border-radius: 8px;
     padding: 10px 14px; font-size: 13px; color: var(--amber-strong);
@@ -4806,7 +4806,7 @@ function buildFamilyShareHTML(payload) {
   --bg: #cccccc; --bg-card: #ffffff; --bg-soft: #bdbdbd; --bg-softer: #e8e8e8;
   --border: #a8a8a8; --border-light: #d0d0d0;
   --text: #242424; --text-2: #4a4a4a;
-  /* Was #666666 (3.58:1 on this page's own --bg — fails WCAG AA 4.5:1 for
+  /* Was #666666 (3.58:1 on this page's own --bg, fails WCAG AA 4.5:1 for
      normal text; same gap PR #1 fixed in the main app's --text-3). Same fix,
      same value: #525252 reads as the same "quiet label" tier and passes on
      --bg, --bg-softer, and --bg-card. */
