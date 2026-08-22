@@ -20,7 +20,7 @@
     --bg-softer: #e8e8e8;
     --text: #242424;
     --text-2: #4a4a4a;
-    /* Was #666666 (3.6:1 on the page's own gray background — fails WCAG AA for
+    /* Was #666666 (3.6:1 on the page's own gray background, fails WCAG AA for
        normal text). #525252 keeps the same "quiet label" role but reads clearly
        in daylight, which matters for an app used outdoors while traveling. */
     --text-3: #525252;
@@ -46,7 +46,7 @@
     /* "-strong" text variants: the base status colors (amber/green/red/accent/orange)
        read fine as large counter numbers or icons on white (>=3:1, the AA threshold
        for large text), but at pill/badge size (11px) on their matching "-soft"
-       background they measure 3.4-4.1:1 — under the 4.5:1 AA minimum for small text.
+       background they measure 3.4-4.1:1, under the 4.5:1 AA minimum for small text.
        These darker variants are for text ON a "-soft" chip background only; the
        base colors are unchanged everywhere else (borders, icons, large numerals). */
     --amber-strong: #6b5500;
@@ -311,7 +311,7 @@
   /* WARNINGS */
   .warnings { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
   /* Text uses the "-strong" variant (not --amber/--red) because this is 13px
-     text on a tinted chip background — see the --*-strong comment in :root. */
+     text on a tinted chip background, see the --*-strong comment in :root. */
   .warning {
     background: var(--amber-soft); border: 1px solid var(--amber); border-radius: 8px;
     padding: 10px 14px; font-size: 13px; color: var(--amber-strong);
@@ -4805,11 +4805,24 @@ function buildFamilyShareHTML(payload) {
 :root {
   --bg: #cccccc; --bg-card: #ffffff; --bg-soft: #bdbdbd; --bg-softer: #e8e8e8;
   --border: #a8a8a8; --border-light: #d0d0d0;
-  --text: #242424; --text-2: #4a4a4a; --text-3: #666666;
+  --text: #242424; --text-2: #4a4a4a;
+  /* Was #666666 (3.58:1 on this page's own --bg, fails WCAG AA 4.5:1 for
+     normal text; same gap PR #1 fixed in the main app's --text-3). Same fix,
+     same value: #525252 reads as the same "quiet label" tier and passes on
+     --bg, --bg-softer, and --bg-card. */
+  --text-3: #525252;
   --accent: #c72027; --accent-hover: #9c181d; --accent-soft: #f3d1d3;
   --green: #2d7d34; --green-soft: #d4e8d5;
   --blue: #2c5d8a; --blue-soft: #d3e0ee;
   --amber: #8a6d00; --amber-soft: #ede1be;
+  /* "-strong" text variants, same pattern and values as PR #1's main-app fix:
+     the base color reads fine as a border/icon/large glyph, but at pill/badge
+     size on its own "-soft" tinted background (or this doc's gray page bg) it
+     falls under 4.5:1. Used for text only; base colors are unchanged for
+     borders, the map's dot markers, and large text (e.g. the hero italic). */
+  --green-strong: #235f29;
+  --amber-strong: #6b5500;
+  --accent-strong: #8a161c;
   --shadow-sm: 0 1px 2px rgba(0,0,0,.08);
   --shadow-md: 0 2px 8px rgba(0,0,0,.10);
 }
@@ -4817,7 +4830,7 @@ function buildFamilyShareHTML(payload) {
 body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 36px 20px 60px; -webkit-font-smoothing: antialiased; }
 .doc { max-width: 880px; margin: 0 auto; }
 .hero { margin-bottom: 36px; padding: 48px 0 28px; border-bottom: 1px solid var(--border); position: relative; }
-.hero::before { content: 'TRAVEL TRACKER'; position: absolute; top: 0; left: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent); letter-spacing: 0.28em; padding: 5px 11px; border: 1px solid var(--accent); border-radius: 2px; }
+.hero::before { content: 'TRAVEL TRACKER'; position: absolute; top: 0; left: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent-strong); letter-spacing: 0.28em; padding: 5px 11px; border: 1px solid var(--accent); border-radius: 2px; }
 .hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: 56px; font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; }
 .hero h1 .em { color: var(--accent); font-style: italic; font-weight: 500; }
 .hero .sub { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.16em; text-transform: uppercase; }
@@ -4836,7 +4849,7 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .accom-item a { color: var(--accent); text-decoration: none; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
 .accom-item a:hover { text-decoration: underline; }
 .accom-item.current { background: var(--accent-soft); border-color: var(--accent); border-left: 4px solid var(--accent); }
-.accom-item.current .accom-name { color: var(--accent); font-weight: 600; }
+.accom-item.current .accom-name { color: var(--accent-strong); font-weight: 600; }
 .accom-item.current::after { content: 'TONIGHT'; display: inline-block; margin-left: 8px; font-family: 'JetBrains Mono', monospace; font-size: 9px; background: var(--accent); color: white; padding: 1px 6px; border-radius: 3px; letter-spacing: 0.1em; font-weight: 600; vertical-align: middle; }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 40px 0 18px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .section-head h2 { font-family: 'Fraunces', Georgia, serif; font-size: 28px; font-weight: 500; font-style: italic; line-height: 1.2; }
@@ -4850,20 +4863,20 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .leg-dates { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-2); letter-spacing: 0.03em; }
 .leg-accom { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-light); }
 .pill { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; font-weight: 500; margin-left: 8px; vertical-align: middle; display: inline-block; }
-.pill.booked { background: var(--green-soft); color: var(--green); }
+.pill.booked { background: var(--green-soft); color: var(--green-strong); }
 .pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
-.pill.tentative { background: var(--amber-soft); color: var(--amber); }
+.pill.tentative { background: var(--amber-soft); color: var(--amber-strong); }
 /* City guide cross-link to cityops (same pill vocabulary as .pill, outline instead of fill) */
 .guide-link { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; font-weight: 500; display: inline-block; margin-left: 8px; vertical-align: middle; white-space: nowrap; }
 .guide-link:hover { background: var(--accent-soft); }
 .current-banner .dates .guide-link { margin-left: 10px; }
 .hero .sub-links { margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
-.hero .sub-links a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+.hero .sub-links a { color: var(--accent-strong); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
 .hero .sub-links a:hover { border-bottom-color: var(--accent); }
 .map-wrap { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 8px; }
 #map { height: 420px; z-index: 1; }
 .map-reset-btn { position: absolute; top: 10px; left: 52px; z-index: 1000; background: white; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; padding: 5px 10px; font-size: 11px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.15s; }
-.map-reset-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.map-reset-btn:hover { background: var(--accent-soft); color: var(--accent-strong); border-color: var(--accent); }
 .map-legend { display: flex; gap: 16px; flex-wrap: wrap; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 8px; }
 .map-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: middle; border: 1.5px solid white; box-shadow: 0 0 0 1px var(--border); }
 .empty { color: var(--text-3); font-style: italic; padding: 24px; text-align: center; background: var(--bg-softer); border: 1px dashed var(--border); border-radius: 8px; font-size: 13px; }
