@@ -1661,6 +1661,11 @@
         </div>
       </div>
 
+      <div class="setting-card" id="sync-card">
+        <h3>Sync across devices</h3>
+        <div id="sync-card-body"></div>
+      </div>
+
       <div class="setting-card">
         <h3>Share with family</h3>
         <div class="muted" style="margin-bottom:10px">Generate a standalone HTML file showing your travel plan (no budgets) for family to track your whereabouts. Self-updating: each visit recalculates past / current / future based on visit date.</div>
@@ -1833,6 +1838,30 @@
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeNotesImport()">Cancel</button>
       <button class="btn-secondary green" id="notes-apply-btn" onclick="applyNotesImport()" style="display:none">Apply to itinerary</button>
+    </div>
+  </div>
+</div>
+
+<!-- SIGN IN MODAL (sync) -->
+<div class="modal-bg" id="signin-modal-bg" onclick="if(event.target===this)closeSignInModal()">
+  <div class="modal" style="max-width:520px">
+    <h3>Sign in to sync</h3>
+    <div class="modal-sub">
+      Your itinerary follows you to your other devices. No password: we email you a link, you tap it,
+      you are in. The same sign-in also covers your city guides at cityops.robriggs.com.
+    </div>
+    <label for="signin-email" style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-3);display:block;margin-bottom:6px">Email address</label>
+    <input class="text-input" type="email" id="signin-email" name="email" autocomplete="email"
+           placeholder="you@example.com" style="width:100%" oninput="onSignInInput()"
+           onkeydown="if(event.key==='Enter'&amp;&amp;!document.getElementById('signin-send').disabled)submitSignIn()">
+    <div id="signin-msg" style="margin-top:10px;font-size:13px;min-height:18px;line-height:1.5;color:var(--text-3)"></div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeSignInModal()">Cancel</button>
+      <button class="btn-secondary green" id="signin-send" onclick="submitSignIn()" disabled>Send magic link</button>
+    </div>
+    <div class="muted" style="margin-top:14px;font-size:12px;line-height:1.5">
+      The editor works exactly the same signed out. Signing in adds your other devices; it never takes
+      anything off this one.
     </div>
   </div>
 </div>
@@ -2129,6 +2158,10 @@ function saveState() {
   }
   showSaved();
   updateHero();
+  // Sync hangs off the single write door, so nothing can edit state without the
+  // account hearing about it. Both calls are no-ops until sync is signed in, and
+  // both are wrapped: a sync problem must never break a local save.
+  try { stampLocalEdit(); schedulePush(); } catch (e) { console.warn('[plan-ahead sync] save hook failed', e); }
 }
 
 // ==================== SNAPSHOTS ====================
@@ -8396,6 +8429,11 @@ function renderAll() {
   renderMap();
   renderBackupFreshness();
   renderPublishFreshness();
+  // Sync surfaces live in their own hosts that no other renderer writes to, but
+  // they are redrawn here so a full repaint can never leave a stale "Local only"
+  // chip above a signed-in app.
+  try { renderSyncCard(); updateSyncChip(); renderSyncAlert(); }
+  catch (e) { console.warn('[plan-ahead sync] render failed', e); }
 }
 
 // ==================== COLLAPSIBLE SECTIONS ====================
@@ -8568,6 +8606,974 @@ function initCollapsibleSections() {
 
 // ==================== INIT ====================
 
+// ==================== SYNC ACROSS DEVICES ====================
+// Ported wholesale from cityops (src/app-shell.html + syncKit in cityops.js).
+// Same Supabase project, same GoTrue magic-link auth over raw fetch, no SDK, so
+// ONE sign-in serves both apps and the two read as one product.
+//
+// The rules below are not style choices. Each one is a bug cityops already paid
+// for once, and every one of them is load-bearing:
+//
+//   1. Newer wins, compared as EPOCH MILLISECONDS. Never string-compare two
+//      timestamps: Postgres answers "+00:00" and JS writes "Z", so "2026-08-26
+//      T10:00:00+00:00" < "2026-08-26T10:00:00Z" lexically while being the same
+//      instant. That comparison silently reversed a sync once.
+//   2. A local baseline is stamped BEFORE the first pull, so a device that
+//      already holds real trip data wins its first reconcile and pushes that
+//      data up. Without it, signing in on Rob's laptop would pull an empty
+//      server row over his whole itinerary.
+//   3. A null read is NOT an empty server. An unanswered GET means "we do not
+//      know", and we leave both sides alone. Treating it as [] would push this
+//      device's state over a newer one.
+//   4. Only a demonstrably dead grant signs you out. GoTrue answers a revoked
+//      refresh token and a paused project with the same 4xx family, and only
+//      the BODY tells them apart (Supabase: code 400, error_code
+//      validation_failed, "Refresh token is not valid"). Anything vaguer keeps
+//      the session, because throwing a session away over a transient 403 forces
+//      a re-sign-in for a problem that fixes itself.
+//   5. A stopped sync says so visibly and keeps saying so. A toast is not
+//      enough: the next render wipes it and the traveler never learns that
+//      nothing has reached the other device in three days.
+//
+// Local always keeps working. Sync is additive: signed out, offline, or with the
+// table not yet created, the app behaves exactly as it did before this block.
+
+const SUPA = {
+  url: 'https://ggscdbbvqmqiyguiccrf.supabase.co',
+  // Publishable (anon) key. Public by design, exactly as in cityops: it grants
+  // nothing on its own. Row Level Security is the security boundary, and anon
+  // is revoked on the table outright.
+  anon: 'sb_publishable_j3oRAQ-3889fkN26FtaE7g_jMyx1Lda'
+};
+
+const AUTH_KEY = 'planahead:auth:v1';        // {access_token, refresh_token, expires_at, email}
+const SYNC_KEY = 'planahead:sync:v1';        // {localUpdated, lastSync}
+const SYNC_ALERT_KEY = 'planahead:sync:alert:v1';  // {kind, at}
+const GUIDES_KEY = 'planahead:cityops:v1';   // {ids:[cityId], at:iso} - see the seam section
+const SYNC_TABLE = 'planahead';
+const EPOCH_ISO = '1970-01-01T00:00:00.000Z';
+
+let _session = null;
+let _syncEmail = '';
+let _lastSyncIso = null;
+let _localUpdated = null;      // this device's stamp for STORAGE_KEY, in its own key
+let _syncTableMissing = false; // set once if the SQL has not been applied yet
+let _pushTimer = null;
+let _pushQueued = false;
+let _refreshInFlight = null;
+let _pullInFlight = false;
+let _lastPullAt = 0;
+let _refreshTrouble = 0;
+let _alertHiddenForNow = false;
+let _syncSafetySnapshotTaken = false;
+
+function syncOn() { return !!(SUPA.url && SUPA.anon && typeof fetch === 'function'); }
+function syncSignedIn() { return !!(_session && _session.access_token); }
+
+function syncWarn(what, e) {
+  console.warn('[plan-ahead sync] ' + what + (e && e.message ? ' (' + e.message + ')' : ''));
+}
+
+function readLSJSON(key) {
+  try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+function writeLSJSON(key, value) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {}
+}
+
+// ---- pure decision logic (rule 1) ----
+function isoMs(v) {
+  if (typeof v !== 'string' || !v) return null;
+  const t = Date.parse(v);
+  return (typeof t !== 'number' || isNaN(t)) ? null : t;
+}
+
+// 'push' = this device should go up, 'pull' = the account should come down,
+// 'noop' = leave both alone. Ties keep local.
+function syncDecide(localIso, remoteIso) {
+  const l = isoMs(localIso);
+  const r = isoMs(remoteIso);
+  if (l === null && r === null) return 'noop';
+  if (r === null) return 'push';
+  if (l === null) return 'pull';
+  if (l > r) return 'push';
+  if (l < r) return 'pull';
+  return 'noop';
+}
+
+// Rule 4: read the BODY, not the status. Anything that is not a 4xx, and any
+// 429, says nothing about the grant and is transient by definition.
+const DEAD_GRANT_RE = /invalid[_ -]?grant/i;
+const TOKEN_NAMED_RE = /refresh[_ -]?token/i;
+const TOKEN_BAD_RE = /not[_ -]?valid|invalid|expired|revoked|already[_ -]?used|not[_ -]?found/i;
+
+function syncRefreshFailure(status, bodyText) {
+  const s = Number(status);
+  if (!isFinite(s) || s < 400 || s >= 500 || s === 429) return 'transient';
+  const b = String(bodyText || '');
+  if (DEAD_GRANT_RE.test(b)) return 'dead';
+  return (TOKEN_NAMED_RE.test(b) && TOKEN_BAD_RE.test(b)) ? 'dead' : 'transient';
+}
+
+// GoTrue returns the magic-link session in the URL fragment. Both tokens are
+// required: an access token with no refresh token dies silently in an hour with
+// no way back, so that counts as no session at all.
+function parseAuthHash(hash, nowMs) {
+  let s = String(hash === null || hash === undefined ? '' : hash);
+  if (s.charAt(0) === '#') s = s.slice(1);
+  if (!s || s.indexOf('=') === -1) return null;
+  const out = {};
+  s.split('&').forEach(pair => {
+    if (!pair) return;
+    const i = pair.indexOf('=');
+    if (i === -1) return;
+    let k = pair.slice(0, i);
+    let v = pair.slice(i + 1);
+    try { k = decodeURIComponent(k); } catch (e) {}
+    try { v = decodeURIComponent(v.replace(/\+/g, ' ')); } catch (e2) {}
+    if (k) out[k] = v;
+  });
+  if (!out.access_token || !out.refresh_token) return null;
+  const now = (typeof nowMs === 'number') ? nowMs : Date.now();
+  let expSec;
+  if (out.expires_at && /^\d+$/.test(out.expires_at)) expSec = parseInt(out.expires_at, 10);
+  else if (out.expires_in && /^\d+$/.test(out.expires_in)) expSec = Math.floor(now / 1000) + parseInt(out.expires_in, 10);
+  else expSec = Math.floor(now / 1000);  // unknown TTL: force a refresh on first use
+  return {
+    access_token: out.access_token,
+    refresh_token: out.refresh_token,
+    token_type: out.token_type || 'bearer',
+    expires_at: expSec,
+    email: out.email || ''
+  };
+}
+
+function sessionExpiringSoon(sess, nowMs) {
+  if (!sess || !sess.access_token) return true;
+  let exp = sess.expires_at;
+  if (typeof exp === 'string' && /^\d+$/.test(exp)) exp = parseInt(exp, 10);
+  if (typeof exp !== 'number' || !isFinite(exp)) return true;
+  const ms = exp > 1e12 ? exp : exp * 1000;   // accept seconds or milliseconds
+  const now = (typeof nowMs === 'number') ? nowMs : Date.now();
+  return (ms - now) < 60000;
+}
+
+// ---- session + stamp storage ----
+function loadSyncSession() {
+  const s = readLSJSON(AUTH_KEY);
+  if (!s || typeof s.access_token !== 'string' || typeof s.refresh_token !== 'string') return null;
+  return s;
+}
+
+function saveSyncSession(s) {
+  _session = s;
+  _syncEmail = (s && s.email) || '';
+  writeLSJSON(AUTH_KEY, s || null);
+}
+
+function loadSyncMeta() {
+  const m = readLSJSON(SYNC_KEY);
+  if (!m) return;
+  if (typeof m.lastSync === 'string') _lastSyncIso = m.lastSync;
+  if (typeof m.localUpdated === 'string') _localUpdated = m.localUpdated;
+}
+
+function writeSyncMeta() {
+  writeLSJSON(SYNC_KEY, { localUpdated: _localUpdated, lastSync: _lastSyncIso });
+}
+
+function stampSync() {
+  _lastSyncIso = new Date().toISOString();
+  writeSyncMeta();
+  renderSyncCard();
+  updateSyncChip();
+}
+
+// Called from saveState() on EVERY local write. This is the only thing that
+// makes this device "newer" than the account.
+function stampLocalEdit() {
+  _localUpdated = new Date().toISOString();
+  writeSyncMeta();
+}
+
+// Rule 2. A device that already holds real trip data but has never stamped it
+// (i.e. every device Rob owns, the first time it loads this build) must win its
+// first reconcile, or the pull would replace his itinerary with whatever the
+// account happens to hold. "Real data" is deliberately generous: any city, idea,
+// transition, or an edited profile counts.
+function ensureBaselineStamp() {
+  if (_localUpdated) return;
+  const hasRealData =
+    (state.cities || []).length > 0 ||
+    (state.ideas || []).length > 0 ||
+    (state.transitions || []).length > 0 ||
+    (state.travelerName || '') !== '' ||
+    (state.profile || '') !== DEFAULT_PROFILE;
+  if (!hasRealData) return;   // genuinely empty browser: let the account fill it
+  _localUpdated = state.lastSession || new Date().toISOString();
+  writeSyncMeta();
+  console.log('[plan-ahead sync] local baseline stamped at ' + _localUpdated + ' (existing data adopts on first sign-in)');
+}
+
+// ---- the persistent sync alert (rule 5) ----
+function readSyncAlert() {
+  const a = readLSJSON(SYNC_ALERT_KEY);
+  return (a && typeof a.kind === 'string') ? a : null;
+}
+
+function raiseSyncAlert(kind) {
+  const cur = readSyncAlert();
+  // Keep the ORIGINAL timestamp: "nothing has synced since" has to name when
+  // sync actually stopped, not the last time we noticed it was stopped.
+  const at = (cur && cur.at) ? cur.at : (_lastSyncIso || new Date().toISOString());
+  writeLSJSON(SYNC_ALERT_KEY, { kind: kind, at: at });
+  _alertHiddenForNow = false;
+  renderSyncAlert();
+}
+
+function clearSyncAlert() {
+  writeLSJSON(SYNC_ALERT_KEY, null);
+  _refreshTrouble = 0;
+  renderSyncAlert();
+}
+
+function renderSyncAlert() {
+  const host = document.getElementById('syncalert');
+  if (!host) return;
+  host.innerHTML = '';
+  const a = readSyncAlert();
+  if (!a || _alertHiddenForNow || !syncOn()) return;
+  if (syncSignedIn() && a.kind === 'signedout') { clearSyncAlert(); return; }
+
+  let when = '';
+  try { when = a.at ? new Date(a.at).toLocaleString() : ''; } catch (e) {}
+
+  const bar = document.createElement('div');
+  bar.className = 'syncalert';
+  bar.setAttribute('role', 'status');
+
+  const txt = document.createElement('span');
+  txt.className = 'syncalert-txt';
+  if (a.kind === 'signedout') {
+    txt.textContent = 'Sync stopped: your sign-in expired' +
+      (when ? ', so nothing has reached your other devices since ' + when : '') +
+      '. Everything you have done is still saved on this device.';
+  } else if (a.kind === 'notable') {
+    txt.textContent = 'Sync is not set up on the server yet, so this device is not sharing with your others. ' +
+      'Everything you have done is still saved here. Run the one-time SQL setup, then sign in again.';
+  } else {
+    txt.textContent = 'Sync is not reaching your account right now. Everything you have done is still saved on ' +
+      'this device, and will go up when it reconnects.';
+  }
+  bar.appendChild(txt);
+
+  const acts = document.createElement('span');
+  acts.className = 'syncalert-acts';
+  if (a.kind === 'signedout') {
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'btn-secondary';
+    go.textContent = 'Sign in';
+    go.onclick = openSignInModal;
+    acts.appendChild(go);
+  } else if (a.kind !== 'notable') {
+    const now = document.createElement('button');
+    now.type = 'button';
+    now.className = 'btn-secondary';
+    now.textContent = 'Try now';
+    now.onclick = () => { syncNow(); };
+    acts.appendChild(now);
+  }
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.className = 'btn-secondary';
+  no.textContent = 'Not now';
+  no.title = 'Hide this until the next time you open the app';
+  no.onclick = () => { _alertHiddenForNow = true; renderSyncAlert(); };
+  acts.appendChild(no);
+  bar.appendChild(acts);
+  host.appendChild(bar);
+}
+
+// A refresh that failed for a reason that is NOT a dead token keeps the session,
+// but three in a row means sync has stopped in a way Rob should hear about
+// rather than discover on the next device.
+function noteRefreshTrouble() {
+  _refreshTrouble++;
+  if (_refreshTrouble >= 3) raiseSyncAlert('stuck');
+}
+
+function noteSyncWorking() {
+  _refreshTrouble = 0;
+  if (readSyncAlert()) clearSyncAlert();
+}
+
+// The one path that signs a user out on its own: a refresh token the server
+// refuses. Everything transient keeps the session.
+function dropSyncSession(msg) {
+  saveSyncSession(null);
+  _pushQueued = false;
+  if (_pushTimer) { clearTimeout(_pushTimer); _pushTimer = null; }
+  if (msg) toast(msg, 'error');
+  raiseSyncAlert('signedout');
+  renderSyncCard();
+  updateSyncChip();
+}
+
+// ---- transport ----
+function ensureSyncToken(force) {
+  if (!syncOn() || !_session) return Promise.resolve(null);
+  if (!force && !sessionExpiringSoon(_session, Date.now())) {
+    return Promise.resolve(_session.access_token);
+  }
+  if (_refreshInFlight) return _refreshInFlight;
+  _refreshInFlight = fetch(SUPA.url + '/auth/v1/token?grant_type=refresh_token', {
+    method: 'POST',
+    headers: { 'apikey': SUPA.anon, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: _session.refresh_token })
+  }).then(r => {
+    if (r.ok) return r.json().then(j => ({ ok: true, body: j }));
+    // Rule 4: keep the body, the status alone cannot tell a revoked grant from
+    // a paused project.
+    return r.text().then(
+      t => ({ ok: false, status: r.status, text: t }),
+      () => ({ ok: false, status: r.status, text: '' })
+    );
+  }).then(res => {
+    if (!res.ok) {
+      if (syncRefreshFailure(res.status, res.text) === 'dead') {
+        dropSyncSession('Sync signed out: your sign-in expired. Sign in again to resume syncing.');
+        return null;
+      }
+      syncWarn('token refresh rejected (session kept), http ' + res.status);
+      noteRefreshTrouble();
+      return null;
+    }
+    const j = res.body;
+    if (!j || !j.access_token || !j.refresh_token) {
+      dropSyncSession('Sync signed out: your sign-in expired. Sign in again to resume syncing.');
+      return null;
+    }
+    saveSyncSession({
+      access_token: j.access_token,
+      refresh_token: j.refresh_token,
+      token_type: j.token_type || 'bearer',
+      expires_at: j.expires_at || (Math.floor(Date.now() / 1000) + (j.expires_in || 3600)),
+      email: (j.user && j.user.email) || _syncEmail || ''
+    });
+    noteSyncWorking();
+    return _session.access_token;
+  }).catch(e => {
+    // Offline or a transient server problem: keep the session, skip this round.
+    syncWarn('token refresh failed', e);
+    return null;
+  }).then(tok => { _refreshInFlight = null; return tok; });
+  return _refreshInFlight;
+}
+
+// Authenticated call. Resolves to parsed JSON, or null when there is no usable
+// token. Rejects on transport/HTTP errors so callers swallow them in one place.
+function syncApi(path, opts, retried) {
+  return ensureSyncToken(false).then(tok => {
+    if (!tok) return null;
+    const o = opts || {};
+    const headers = { 'apikey': SUPA.anon, 'Authorization': 'Bearer ' + tok };
+    if (o.headers) Object.keys(o.headers).forEach(k => { headers[k] = o.headers[k]; });
+    return fetch(SUPA.url + path, { method: o.method || 'GET', headers: headers, body: o.body })
+      .then(r => {
+        if (r.status === 401 && !retried) {
+          // Rejected before its stated expiry: refresh once, retry once, then
+          // give up for this round. Never a retry loop.
+          return ensureSyncToken(true).then(t2 => (t2 ? syncApi(path, opts, true) : null));
+        }
+        if (!r.ok) throw new Error('http ' + r.status);
+        if (r.status === 204) return null;
+        const ct = (r.headers && r.headers.get) ? (r.headers.get('content-type') || '') : '';
+        return ct.indexOf('json') === -1 ? null : r.json();
+      });
+  });
+}
+
+// The table is created by a one-time SQL block Rob pastes into the Supabase SQL
+// editor. Until then PostgREST answers every call with 404 (PGRST205). Notice it
+// once, say so plainly, and let the app carry on exactly as before.
+function noteSyncTable(e) {
+  if (_syncTableMissing) return;
+  const msg = (e && e.message) || '';
+  if (msg.indexOf('404') === -1) return;
+  _syncTableMissing = true;
+  syncWarn('table "' + SYNC_TABLE + '" not found; sync is off until the setup SQL is applied');
+  raiseSyncAlert('notable');
+  renderSyncCard();
+  updateSyncChip();
+}
+
+// ---- push ----
+// 2s debounce: a burst of edits produces one upsert. A failed flush is NOT
+// retried on a timer. Local stays newer than the server, so the next pull's
+// reconcile pushes it. Local IS the queue.
+function schedulePush() {
+  if (!syncOn() || !syncSignedIn() || _syncTableMissing) return;
+  _pushQueued = true;
+  if (_pushTimer) clearTimeout(_pushTimer);
+  _pushTimer = setTimeout(flushPush, 2000);
+}
+
+function flushPush() {
+  _pushTimer = null;
+  if (!_pushQueued) return;
+  _pushQueued = false;
+  pushNow();
+}
+
+// The tab is about to go away (hidden or unloading) and a queued edit that never
+// flushes is an edit that never syncs.
+function flushPendingPush() {
+  if (!syncOn() || !syncSignedIn() || !_pushTimer) return;
+  clearTimeout(_pushTimer);
+  _pushTimer = null;
+  flushPush();
+}
+
+function pushNow() {
+  if (!syncOn() || !syncSignedIn() || _syncTableMissing) return Promise.resolve(false);
+  if (!_localUpdated) return Promise.resolve(false);   // nothing this device has stamped
+  // user_id is omitted on purpose: the column defaults to auth.uid(), so the
+  // row can only ever be filed under the signed-in user, whatever we send.
+  const row = { data: state, updated_at: _localUpdated };
+  return syncApi('/rest/v1/' + SYNC_TABLE + '?on_conflict=user_id', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates,return=minimal'
+    },
+    body: JSON.stringify([row])
+  }).then(() => { stampSync(); noteSyncWorking(); return true; })
+    .catch(e => { noteSyncTable(e); syncWarn('push failed', e); return false; });
+}
+
+// ---- pull ----
+function pullNow(force) {
+  if (!syncOn() || !syncSignedIn() || _syncTableMissing || _pullInFlight) return Promise.resolve(false);
+  const now = Date.now();
+  if (!force && now - _lastPullAt < 60000) return Promise.resolve(false);
+  _pullInFlight = true;
+  _lastPullAt = now;
+  return syncApi('/rest/v1/' + SYNC_TABLE + '?select=data,updated_at&limit=1')
+    .then(rows => {
+      // Rule 3: a null read means "we do not know". An empty table is [].
+      if (!Array.isArray(rows)) return false;
+      applyPull(rows.length ? rows[0] : null);
+      stampSync();
+      noteSyncWorking();
+      return true;
+    })
+    .catch(e => { noteSyncTable(e); syncWarn('pull failed', e); return false; })
+    .then(ok => {
+      _pullInFlight = false;
+      // The throttle exists to stop a chatty tab, not to make a FAILED pull wait
+      // out a minute. A phone that woke with no signal and reconnected ten
+      // seconds later would otherwise show stale data for the rest of the minute.
+      if (!ok) _lastPullAt = 0;
+      return ok;
+    });
+}
+
+// Never prompts and never evicts anything the traveler made on purpose: at most
+// one per page life, and skipped entirely if the manual tier is already full.
+function takeSyncSafetySnapshot() {
+  if (_syncSafetySnapshotTaken) return;
+  try {
+    const snaps = loadSnapshots();
+    if (snaps.filter(s => !s.isAuto).length >= MAX_MANUAL_SNAPSHOTS) return;
+    snaps.push({
+      id: newId(),
+      name: 'Before first sync pull on this device',
+      createdAt: new Date().toISOString(),
+      isAuto: false,
+      data: _deepClone(state)
+    });
+    saveSnapshotsArray(snaps);
+    _syncSafetySnapshotTaken = true;
+  } catch (e) { syncWarn('safety snapshot failed', e); }
+}
+
+function applyPull(row) {
+  const remoteIso = (row && typeof row.updated_at === 'string') ? row.updated_at : null;
+  const verdict = syncDecide(_localUpdated, remoteIso);
+
+  if (verdict === 'push') { pushNow(); return; }
+  if (verdict !== 'pull') return;
+  if (!row || !row.data || typeof row.data !== 'object' || Array.isArray(row.data)) {
+    syncWarn('remote row had no usable data object; left local alone');
+    return;
+  }
+
+  // Belt and braces on top of newer-wins: the local data goes into a snapshot
+  // before the account replaces it, so a surprise is always one click from
+  // undone (Settings, Snapshots, Restore).
+  takeSyncSafetySnapshot();
+
+  state = Object.assign(defaultState(), row.data);
+  openCityIds = new Set();
+  // Keep the REMOTE stamp. This is not a local edit, and re-stamping it now
+  // would make this device win the next reconcile against the device that
+  // actually made the change, and push the same bytes straight back.
+  _localUpdated = remoteIso;
+  writeSyncMeta();
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch (e) { syncWarn('could not persist pulled state (storage full?)', e); }
+
+  recomputeGlobalScores();
+  renderAll();
+  refreshGuideIndex();
+  let when = '';
+  try { when = remoteIso ? new Date(remoteIso).toLocaleString() : ''; } catch (e) {}
+  toast('Synced: your itinerary updated from your other device' + (when ? ' (' + when + ')' : '') + '.', 'ok');
+}
+
+// ---- auth actions ----
+let _emailLookupDone = false;
+function fetchSyncUserEmail() {
+  if (_emailLookupDone) return;
+  _emailLookupDone = true;
+  syncApi('/auth/v1/user').then(u => {
+    if (!u || !u.email || !_session) return;
+    _session.email = u.email;
+    saveSyncSession(_session);
+    renderSyncCard();
+    updateSyncChip();
+  }).catch(e => syncWarn('user lookup failed', e));
+}
+
+function cleanAuthHash() {
+  try { history.replaceState(null, '', location.pathname + location.search); }
+  catch (e) {}
+}
+
+// Runs before anything else reads the fragment. A magic-link return replaces the
+// whole fragment with the GoTrue session; it is scrubbed immediately, because an
+// access token must not sit in the address bar or in browser history.
+function consumeAuthHash() {
+  if (!syncOn()) return null;
+  const h = String(location.hash || '');
+  if (!h) return null;
+  if (h.indexOf('access_token=') === -1) {
+    if (/[#&]error=/.test(h) && h.indexOf('error_description=') !== -1) {
+      cleanAuthHash();
+      return 'That sign-in link did not work. Send yourself a new one.';
+    }
+    return null;
+  }
+  const s = parseAuthHash(h, Date.now());
+  cleanAuthHash();
+  if (!s) return 'That sign-in link was incomplete. Send yourself a new one.';
+  saveSyncSession(s);
+  clearSyncAlert();
+  fetchSyncUserEmail();
+  return 'Signed in. Syncing your itinerary.';
+}
+
+// Resolves to null on success, or a human-readable error string.
+function sendMagicLink(email) {
+  // The editor's own URL. This exact origin plus path must be on the project's
+  // redirect allowlist or GoTrue refuses to send you back here.
+  const redirect = location.origin + location.pathname;
+  return fetch(SUPA.url + '/auth/v1/otp?redirect_to=' + encodeURIComponent(redirect), {
+    method: 'POST',
+    headers: { 'apikey': SUPA.anon, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email, create_user: true, gotrue_meta_security: {} })
+  }).then(r => {
+    if (r.ok) return null;
+    return r.json().then(
+      j => (j && (j.msg || j.error_description || j.message)) || ('Sign-in service returned ' + r.status + '.'),
+      () => 'Sign-in service returned ' + r.status + '.'
+    );
+  });
+}
+
+function signOutSync() {
+  if (!confirm('Sign out of sync?\n\nThis device keeps everything it already has. It just stops sharing with your other devices.')) return;
+  const tok = _session && _session.access_token;
+  if (tok) {
+    // Best effort revoke. The local session is cleared either way, so the button
+    // can never leave you half signed out.
+    try {
+      fetch(SUPA.url + '/auth/v1/logout', {
+        method: 'POST',
+        headers: { 'apikey': SUPA.anon, 'Authorization': 'Bearer ' + tok }
+      }).catch(() => {});
+    } catch (e) {}
+  }
+  saveSyncSession(null);
+  _pushQueued = false;
+  if (_pushTimer) { clearTimeout(_pushTimer); _pushTimer = null; }
+  _lastSyncIso = null;
+  writeSyncMeta();
+  // Signing out is a decision, not a failure: no alert for it.
+  clearSyncAlert();
+  renderSyncCard();
+  updateSyncChip();
+  toast('Signed out of sync. This device keeps all of your data.', 'ok');
+}
+
+function syncNow() {
+  if (!syncSignedIn()) { openSignInModal(); return Promise.resolve(false); }
+  return pullNow(true).then(ok => {
+    if (ok) pushNow();
+    else toast('Could not reach the sync service. Your work is saved on this device.', 'error');
+    return ok;
+  });
+}
+
+// ---- sign-in modal ----
+function openSignInModal() {
+  const bg = document.getElementById('signin-modal-bg');
+  if (!bg) return;
+  const msg = document.getElementById('signin-msg');
+  const send = document.getElementById('signin-send');
+  const inp = document.getElementById('signin-email');
+  if (msg) { msg.textContent = ''; msg.style.color = 'var(--text-3)'; }
+  if (send) { send.textContent = 'Send magic link'; send.disabled = true; send.title = 'Enter your email address first'; }
+  if (inp) inp.value = _syncEmail || '';
+  bg.classList.add('show');
+  if (inp) { onSignInInput(); inp.focus(); }
+}
+
+function closeSignInModal() {
+  const bg = document.getElementById('signin-modal-bg');
+  if (bg) bg.classList.remove('show');
+}
+
+// A control that is going to fail should never look ready to click.
+function onSignInInput() {
+  const inp = document.getElementById('signin-email');
+  const send = document.getElementById('signin-send');
+  if (!inp || !send) return;
+  const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((inp.value || '').trim());
+  send.disabled = !ok;
+  send.title = ok ? 'Email yourself a one-tap sign-in link' : 'Enter your email address first';
+}
+
+function submitSignIn() {
+  const inp = document.getElementById('signin-email');
+  const send = document.getElementById('signin-send');
+  const msg = document.getElementById('signin-msg');
+  if (!inp || !send) return;
+  const addr = (inp.value || '').trim();
+  send.disabled = true;
+  send.textContent = 'Sending…';
+  if (msg) { msg.textContent = ''; msg.style.color = 'var(--text-3)'; }
+  sendMagicLink(addr).then(err => {
+    send.textContent = 'Send magic link';
+    if (err) {
+      if (msg) { msg.textContent = err; msg.style.color = 'var(--accent)'; }
+      send.disabled = false;
+      return;
+    }
+    if (msg) {
+      msg.textContent = 'Link sent. Open the email ON THIS DEVICE and tap the link. It brings you straight back here, signed in.';
+      msg.style.color = 'var(--green)';
+    }
+    send.title = 'Link already sent to ' + addr;
+  }).catch(() => {
+    send.textContent = 'Send magic link';
+    send.disabled = false;
+    if (msg) {
+      msg.textContent = 'Could not reach the sign-in service. Check your connection and try again.';
+      msg.style.color = 'var(--accent)';
+    }
+  });
+}
+
+// ---- sync UI ----
+function lastSyncLine() {
+  if (!_lastSyncIso) return 'Not synced yet on this device.';
+  let when = _lastSyncIso;
+  try { when = new Date(_lastSyncIso).toLocaleString(); } catch (e) {}
+  return 'Last sync: ' + when + '.';
+}
+
+function onHeroSyncClick() {
+  if (!syncSignedIn()) { openSignInModal(); return; }
+  const el = revealForScroll(document.getElementById('sync-card'));
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function updateSyncChip() {
+  const chip = document.getElementById('hero-sync');
+  if (!chip) return;
+  chip.classList.remove('ok', 'warn');
+  if (!syncOn()) {
+    chip.textContent = 'Local only';
+    chip.title = 'Sync is not configured in this build.';
+    chip.disabled = true;
+    return;
+  }
+  chip.disabled = false;
+  if (_syncTableMissing) {
+    chip.textContent = 'Sync not set up';
+    chip.classList.add('warn');
+    chip.title = 'The one-time SQL setup has not been run on the Supabase project yet.';
+    return;
+  }
+  if (!syncSignedIn()) {
+    chip.textContent = 'Local only';
+    chip.title = 'Tap to sign in and carry this itinerary to your other devices.';
+    return;
+  }
+  if (readSyncAlert()) {
+    chip.textContent = 'Sync stuck';
+    chip.classList.add('warn');
+    chip.title = 'Signed in, but not reaching the account right now. Tap for details.';
+    return;
+  }
+  chip.textContent = 'Synced';
+  chip.classList.add('ok');
+  chip.title = (_syncEmail ? 'Signed in as ' + _syncEmail + '. ' : '') + lastSyncLine();
+}
+
+function renderSyncCard() {
+  const host = document.getElementById('sync-card-body');
+  if (!host) return;
+  host.innerHTML = '';
+
+  const line = document.createElement('div');
+  line.className = 'muted';
+  line.style.marginBottom = '10px';
+
+  if (!syncOn()) {
+    line.textContent = 'Sync is not configured in this build. Everything is saved on this device only.';
+    host.appendChild(line);
+    return;
+  }
+  if (_syncTableMissing) {
+    line.innerHTML = 'Sync is signed in but the server table does not exist yet. Everything is saved on this device ' +
+      'and nothing is lost. Run the one-time setup SQL in the ' +
+      '<a href="https://supabase.com/dashboard/project/ggscdbbvqmqiyguiccrf/sql/new" target="_blank" rel="noopener" ' +
+      'style="color:var(--accent)">Supabase SQL editor</a>, then reload this page.';
+    host.appendChild(line);
+    return;
+  }
+
+  if (syncSignedIn()) {
+    line.textContent = 'Sync is on. Signed in as ' + (_syncEmail || 'your account') +
+      '. Edits here reach your other devices, and theirs reach you.';
+  } else {
+    line.textContent = 'Sync is off: you are not signed in. Everything is saved on this device only, ' +
+      'and will not reach your phone or laptop.';
+  }
+  host.appendChild(line);
+
+  const when = document.createElement('div');
+  when.className = 'muted';
+  when.style.cssText = "font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.04em;margin-bottom:12px";
+  when.textContent = lastSyncLine();
+  host.appendChild(when);
+
+  const acts = document.createElement('div');
+  acts.className = 'setting-actions';
+  if (syncSignedIn()) {
+    const now = document.createElement('button');
+    now.type = 'button';
+    now.className = 'btn-secondary green';
+    now.textContent = 'Sync now';
+    now.onclick = () => {
+      now.disabled = true;
+      now.textContent = 'Syncing…';
+      syncNow().then(() => { now.disabled = false; now.textContent = 'Sync now'; renderSyncCard(); });
+    };
+    acts.appendChild(now);
+
+    const out = document.createElement('button');
+    out.type = 'button';
+    out.className = 'btn-secondary';
+    out.textContent = 'Sign out';
+    out.onclick = signOutSync;
+    acts.appendChild(out);
+  } else {
+    const inb = document.createElement('button');
+    inb.type = 'button';
+    inb.className = 'btn-secondary green';
+    inb.textContent = 'Sign in to sync';
+    inb.onclick = openSignInModal;
+    acts.appendChild(inb);
+  }
+  host.appendChild(acts);
+
+  const note = document.createElement('div');
+  note.className = 'muted';
+  note.style.cssText = 'margin-top:10px;font-size:12px;line-height:1.5';
+  note.textContent = 'Same sign-in as your city guides at cityops.robriggs.com: one magic link covers both apps. ' +
+    'No password. The editor works exactly the same signed out, and signing out never deletes anything from this device.';
+  host.appendChild(note);
+}
+
+// ---- wiring ----
+function startSync() {
+  if (!syncOn()) { updateSyncChip(); return; }
+  loadSyncMeta();
+  ensureBaselineStamp();
+  if (!_session) {
+    const stored = loadSyncSession();
+    if (stored) { _session = stored; _syncEmail = stored.email || ''; }
+  }
+
+  // Bound unconditionally, above the no-session return: both handlers no-op
+  // without a session, and binding them only when a session happened to exist at
+  // load is exactly how a listener goes missing for the rest of the page's life.
+  window.addEventListener('online', () => { pullNow(true); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') pullNow(false);
+    else if (document.visibilityState === 'hidden') flushPendingPush();
+  });
+  window.addEventListener('pagehide', flushPendingPush);
+  // A phone resumed after hours pulls promptly: visibilitychange fires on resume
+  // and the 60s throttle has long expired. pageshow covers the back/forward
+  // cache, where no visibilitychange fires at all.
+  window.addEventListener('pageshow', e => { if (e && e.persisted) pullNow(true); });
+
+  // The alert outlives a reload, so it is drawn at startup, not only at the
+  // moment sync breaks.
+  renderSyncAlert();
+  renderSyncCard();
+  updateSyncChip();
+  if (!_session) return;
+  if (!_syncEmail) fetchSyncUserEmail();
+  pullNow(true);
+  refreshGuideIndex();
+}
+
+// ==================== THE TWO-APP SEAM ====================
+// Division of labour: plan-ahead owns BETWEEN cities (stops, stays, transport),
+// cityops owns WITHIN a city (eat, see, do). A stop card is the hinge, so every
+// stop offers exactly one door:
+//
+//   - cityops already holds a guide for this stop  ->  "City guide"
+//   - it does not                                  ->  "Plan this city"
+//
+// Which of the two you get is a fact, not a guess. Because both apps sign into
+// the SAME Supabase project, plan-ahead can read cityops' own cities table with
+// Rob's token (RLS scopes it to his rows, and cityops needs no change for this
+// to work) and learn exactly which guides exist. The answer is cached, so it
+// survives sign-out, offline, and the family share page, which has no account at
+// all. When we genuinely do not know, we offer "Plan this city": a door that
+// always opens, rather than a guide link that could dead-end on someone else's
+// city. Never offer an action that cannot succeed.
+
+const CITYOPS_BASE = 'https://cityops.robriggs.com';
+
+// MUST match cityops' own slug() byte for byte (src/cityops.js), or every deep
+// link lands on nothing: lowercase, each run of non-alphanumerics becomes one
+// hyphen, trim leading and trailing hyphens.
+function cityopsSlug(name) {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+// cityops' cityId is slug(city.name) + '-' + city.dates.from.
+function cityopsIdFor(name, fromISO) {
+  const slug = cityopsSlug(name);
+  if (!slug || !fromISO) return '';
+  return slug + '-' + fromISO;
+}
+
+function loadGuideIds() {
+  const cached = readLSJSON(GUIDES_KEY);
+  return (cached && Array.isArray(cached.ids)) ? cached.ids : null;
+}
+
+// Reads cityops' city list for the signed-in user. Fails soft in every
+// direction: no session, no table, offline, or a non-array answer all leave the
+// previous cache exactly as it was (a null read is not an empty account, same
+// rule as the itinerary pull).
+function refreshGuideIndex() {
+  if (!syncOn() || !syncSignedIn()) return Promise.resolve(null);
+  return syncApi('/rest/v1/cities?select=city_id')
+    .then(rows => {
+      if (!Array.isArray(rows)) return null;
+      const ids = rows
+        .map(r => (r && typeof r.city_id === 'string') ? r.city_id : null)
+        .filter(Boolean);
+      writeLSJSON(GUIDES_KEY, { ids: ids, at: new Date().toISOString() });
+      repaint();          // stop cards re-render with the right door
+      return ids;
+    })
+    .catch(e => { syncWarn('city guide index read failed (links fall back to Plan this city)', e); return null; });
+}
+
+// Resolve one stop to a cityops guide id, or '' when there is no guide for it.
+// Exact match first (same name, same arrival date). Then a same-city match on a
+// different date: Rob shifts a check-in by a day far more often than he visits
+// the same city twice, and a guide for "Ohrid, arrived the 3rd" is still the
+// right guide when the stop now says the 4th. Nearest date wins.
+function guideIdForStop(city) {
+  const ids = loadGuideIds();
+  if (!ids || !ids.length) return '';
+  const slug = cityopsSlug(city && city.name);
+  if (!slug) return '';
+  const exact = cityopsIdFor(city.name, city.checkIn);
+  if (exact && ids.indexOf(exact) !== -1) return exact;
+
+  const prefix = slug + '-';
+  const siblings = ids.filter(id => id.indexOf(prefix) === 0);
+  if (!siblings.length) return '';
+  if (!city.checkIn || siblings.length === 1) return siblings[0];
+  const want = isoMs(city.checkIn);
+  if (want === null) return siblings[0];
+  let best = siblings[0];
+  let bestGap = Infinity;
+  siblings.forEach(id => {
+    const at = isoMs(id.slice(prefix.length));
+    const gap = (at === null) ? Infinity : Math.abs(at - want);
+    if (gap < bestGap) { bestGap = gap; best = id; }
+  });
+  return best;
+}
+
+function cityopsGuideURL(guideId) {
+  return CITYOPS_BASE + '/#city=' + encodeURIComponent(guideId);
+}
+
+// cityops has NO url-driven prefill today: its hashCity() only matches
+// /^#city=(.+)$/ and its Add-city modal opens on a tap. So this opens the app
+// root and carries the stop's details in a fragment cityops safely ignores
+// (an unrecognised hash is a no-op there). That fragment is the scaffold hook:
+// if cityops ever wants to prefill Add-city from a link, it reads these keys and
+// nothing here has to change. Documented in the handover, not invented as a
+// cityops feature.
+function cityopsPlanURL(city) {
+  const parts = ['plan=' + encodeURIComponent(cityopsSlug(city && city.name))];
+  if (city && city.name) parts.push('name=' + encodeURIComponent(city.name));
+  if (city && city.checkIn) parts.push('from=' + encodeURIComponent(city.checkIn));
+  if (city && city.checkOut) parts.push('to=' + encodeURIComponent(city.checkOut));
+  if (city && city.country) parts.push('country=' + encodeURIComponent(city.country));
+  return CITYOPS_BASE + '/#' + parts.join('&');
+}
+
+// The one control, as an HTML string for the stop card's title row.
+function buildGuideControlHTML(city) {
+  if (!city || !city.name) return '';
+  const guideId = guideIdForStop(city);
+  if (guideId) {
+    return '<a class="guide-link" href="' + escapeHTML(cityopsGuideURL(guideId)) + '"' +
+      ' target="_blank" rel="noopener noreferrer" title="Open the cityops guide for this stop"' +
+      ' onclick="event.stopPropagation()">City guide &#8599;</a>';
+  }
+  return '<a class="guide-link plan-link" href="' + escapeHTML(cityopsPlanURL(city)) + '"' +
+    ' target="_blank" rel="noopener noreferrer"' +
+    ' title="No cityops guide for this stop yet. Opens cityops so you can add one."' +
+    ' onclick="event.stopPropagation()">Plan this city &#8599;</a>';
+}
+
+// A magic-link return arrives as a URL fragment full of tokens. Consume and
+// scrub it FIRST, before any render can put it on screen or the history API can
+// keep it: an access token must never sit in the address bar.
+const _authNotice = consumeAuthHash();
+
 // Daily auto-snapshot: takes one per calendar day on first load, capped at 7.
 // Critical: runs BEFORE any state mutations so it captures the pristine loaded state.
 ensureDailyAutoSnapshot();
@@ -8602,6 +9608,12 @@ recomputeGlobalScores();
 renderAll();
 initCollapsibleSections();  // section headers become toggles; prefs live in their own LS key
 startHeroTick();  // keeps the displayed time live (refreshes every 60s)
+
+// Sync starts LAST: it needs the DOM rendered (the alert bar and the chip live
+// in it) and the local state settled, so the baseline it stamps is the real one.
+// Everything inside is a no-op when signed out.
+try { startSync(); } catch (e) { console.warn('[plan-ahead sync] startSync failed; app continues local-only', e); }
+if (_authNotice) toast(_authNotice, 'ok');
 
 // Build stamp: surface which code is actually running (footer + console) so a stale
 // browser cache can be ruled out instantly when debugging "my edit didn't show".
