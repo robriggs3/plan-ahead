@@ -1284,23 +1284,169 @@
     .map-legend .dot { width: 8px; height: 8px; margin-right: 4px; }
     .footer { margin-top: 36px; }
   }
+
+  /* ==================================================================
+     v2 DESIGN SYSTEM PASS: the cityops idiom, wholesale.
+     cityops earned a look Rob actually likes: a square deep-red header
+     block that runs edge to edge, dense white cards on the grey ground,
+     and outlined pill controls that read as pressable without a hover.
+     This block ports that vocabulary onto plan-ahead's existing tokens
+     (which were already the same palette) so the two apps read as one
+     product. Nothing above is deleted; these rules sit last and win.
+     ================================================================== */
+
+  /* --- The header block ------------------------------------------------
+     Was: a 56px Fraunces headline sitting on the grey page with a
+     right-aligned monospace date, i.e. no header at all, just a title.
+     Now: cityops' full-bleed accent gradient with the facts as chips.
+     The negative margins cancel .wrap's padding so the block touches
+     three edges of the viewport; the values are kept in lockstep with
+     .wrap's own padding at each breakpoint below. */
+  .hero {
+    display: block;
+    background: linear-gradient(160deg, var(--accent) 0%, var(--accent-hover) 100%);
+    color: #ffffff;
+    margin: calc(-1 * var(--space-7)) calc(-1 * var(--space-6)) var(--space-8);
+    padding: 26px var(--space-6) 22px;
+    border-radius: 0;
+  }
+  .hero-left h1 {
+    font-size: 34px; line-height: 1.05; margin-bottom: 6px; color: #ffffff;
+  }
+  /* "ahead." was accent-red on grey. On the red block it has to become the
+     light half of the pair or it disappears into its own background. */
+  .hero-left h1 .accent { color: #ffffff; opacity: 0.72; font-style: italic; }
+  .hero-left .sub { color: rgba(255,255,255,0.9); font-size: 14px; }
+
+  /* cityops .facts / .chip: the dense control row under the title. Every
+     fact and every cross-app door lives here, so the header answers
+     "when is it, when did I last touch this, is it syncing, where is the
+     city guide" in one glance instead of four scattered places. */
+  .hero-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+  .hero-chip {
+    background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25);
+    padding: 5px 11px; border-radius: 20px; font-size: 12px; color: #ffffff;
+    font-family: 'JetBrains Mono', monospace; letter-spacing: 0.03em;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .hero-chip .chip-sub { opacity: 0.72; }
+  /* A chip that is a door, not a fact: same shape, but it lifts on hover and
+     carries the 44px coarse-pointer minimum (see the pointer block below). */
+  a.hero-chip, button.hero-chip {
+    text-decoration: none; cursor: pointer; font: inherit; font-size: 12px;
+    font-family: 'JetBrains Mono', monospace; color: #ffffff;
+  }
+  a.hero-chip:hover, button.hero-chip:hover {
+    background: rgba(255,255,255,0.28); border-color: rgba(255,255,255,0.55);
+  }
+  button.hero-chip:disabled { opacity: 0.5; cursor: default; }
+  /* Sync state colours the chip rather than adding a line: green when the
+     account has this device's work, amber when sync has stopped, plain
+     translucent white when Rob is signed out on purpose. */
+  .hero-chip.ok { background: rgba(212,232,213,0.22); border-color: rgba(212,232,213,0.6); }
+  .hero-chip.warn { background: rgba(237,225,190,0.26); border-color: rgba(237,225,190,0.7); }
+
+  /* --- The persistent sync alert (cityops .syncalert) -------------------
+     Amber, never red: nothing is lost when sync stops, the device still
+     has every byte. This lives in its own host that no renderer touches,
+     so it survives a repaint and a reload, unlike a toast. */
+  .syncalert {
+    background: var(--amber-soft); border: 1px solid var(--amber);
+    border-left: 4px solid var(--amber); border-radius: 10px;
+    padding: 12px 14px; margin: 0 0 20px; font-size: 13px; color: var(--text);
+    line-height: 1.5;
+  }
+  .syncalert-txt { display: block; }
+  .syncalert-acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+  /* --- cityops .ctl: the outlined pill control -------------------------
+     plan-ahead's .btn-secondary is already close; .ctl is the tighter
+     in-card variant for the control row of a stop card. */
+  .ctl {
+    font: inherit; font-size: 12px; font-weight: 700; color: var(--accent-hover);
+    background: var(--bg-card); border: 1.5px solid var(--border-light); border-radius: 20px;
+    padding: 5px 12px; cursor: pointer; text-decoration: none; display: inline-flex;
+    align-items: center; justify-content: center; gap: 5px; white-space: nowrap;
+  }
+  .ctl:hover { border-color: var(--accent); }
+  .ctl.to-done:hover { border-color: var(--green); color: var(--green); }
+  .ctl:disabled { cursor: default; opacity: 0.5; }
+
+  /* --- The two-app seam: guide / plan controls on a stop card ----------
+     A NAVIGATE control, so it keeps the accent outline that plan-ahead's
+     mutating buttons do not have. "City guide" means cityops holds a guide
+     for this exact stop; "Plan this city" means it does not yet, and the
+     control opens cityops rather than pretending the guide exists. */
+  .guide-link {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 500;
+    letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none;
+    padding: 4px 9px; border-radius: 20px; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 4px;
+    border: 1.5px solid var(--accent); color: var(--accent-strong); background: var(--bg-card);
+  }
+  .guide-link:hover { background: var(--accent-soft); }
+  .guide-link.plan-link {
+    border-style: dashed; border-color: var(--border); color: var(--text-3);
+  }
+  .guide-link.plan-link:hover { border-color: var(--accent); color: var(--accent-strong); background: var(--bg-card); }
+
+  /* --- Done and past stops recede --------------------------------------
+     cityops fades what is behind you so the eye lands on what is next.
+     Opacity only: every number a faded stop contributes (Schengen, FEIE,
+     cost) is still counted, so this must never read as "excluded". */
+  .city.is-past > .city-header { opacity: 0.72; }
+  .city.is-past > .city-header:hover { opacity: 1; }
+
+  /* --- Coarse pointers: 44px on every door in the header --------------- */
+  @media (hover: none), (pointer: coarse) {
+    a.hero-chip, button.hero-chip { min-height: 44px; padding: 8px 14px; }
+    .ctl, .guide-link { min-height: 40px; padding: 8px 14px; }
+    .syncalert-acts .btn-secondary { min-height: 44px; }
+  }
+
+  /* --- 390px first ------------------------------------------------------
+     Rob reads this on a phone mid-trip. The header keeps its full bleed at
+     the narrow padding, so these margins track .wrap's 12px exactly. */
+  @media (max-width: 430px) {
+    .hero {
+      margin: -18px -12px 24px;
+      padding: 20px 14px 16px;
+    }
+    .hero-left h1 { font-size: 27px; }
+    .hero-left .sub { font-size: 13px; }
+    .hero-facts { gap: 6px; margin-top: 11px; }
+    .hero-chip { padding: 4px 9px; font-size: 11px; }
+    a.hero-chip, button.hero-chip { font-size: 11px; }
+    .syncalert { padding: 11px 12px; font-size: 12.5px; }
+    .guide-link { font-size: 9px; padding: 4px 8px; }
+  }
 </style>
 </head>
 <body>
 
 <div class="wrap">
 
-  <!-- HERO -->
+  <!-- HERO: cityops' deep-red header block. The facts and both cross-app doors
+       (city guides, sync) live in the chip row so the top of the page answers
+       "when is it, is my work safe, where is the city guide" at one glance. -->
   <header class="hero">
     <div class="hero-left">
       <h1>Plan <span class="accent">ahead.</span></h1>
       <p class="sub">The antidote to "where am I sleeping next week?"</p>
     </div>
-    <div class="hero-right">
-      <div id="hero-date"></div>
-      <div class="last-session" id="hero-last">LAST TOUCHED —</div>
+    <div class="hero-facts">
+      <span class="hero-chip" id="hero-date"></span>
+      <span class="hero-chip" id="hero-last">LAST TOUCHED</span>
+      <button class="hero-chip" id="hero-sync" type="button" onclick="onHeroSyncClick()"
+              title="Sync across your devices">Local only</button>
+      <a class="hero-chip" href="https://cityops.robriggs.com" target="_blank" rel="noopener noreferrer"
+         title="cityops: what to eat, see and do once you are in a city">City guides &#8599;</a>
     </div>
   </header>
+
+  <!-- Sync alert host. Nothing else writes here, so a "sync stopped" bar
+       survives every repaint and every reload until it is resolved. -->
+  <div id="syncalert"></div>
 
   <!-- TRAVEL PLANS — Now/Next/After tile + warnings -->
   <section class="section">
@@ -2483,16 +2629,20 @@ function updateHero() {
     const offsetH = offsetMin / 60;
     tzStr = 'UTC' + (offsetH >= 0 ? '+' : '') + offsetH;
   }
-  // Date on top, current local time + timezone underneath. The time helps you sanity-check
-  // what "now" the app is comparing dates against — especially after a timezone shift.
-  document.getElementById('hero-date').innerHTML =
-    escapeHTML(dateStr) +
-    '<div style="font-size:11px;color:var(--text-3);font-family:JetBrains Mono,monospace;letter-spacing:0.04em;margin-top:2px;text-transform:uppercase">' +
-    escapeHTML(timeStr) + ' · ' + escapeHTML(tzStr) +
-    '</div>';
-  document.getElementById('hero-last').textContent = 'LAST TOUCHED ' + (state.lastSession
-    ? new Date(state.lastSession).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute:'2-digit' })
-    : '—');
+  // Date, then local time + timezone as the quieter half of the same chip. The
+  // time helps you sanity-check what "now" the app is comparing dates against,
+  // which matters most right after a timezone shift.
+  const dateEl = document.getElementById('hero-date');
+  if (dateEl) {
+    dateEl.innerHTML = escapeHTML(dateStr) +
+      '<span class="chip-sub">' + escapeHTML(timeStr) + ' · ' + escapeHTML(tzStr) + '</span>';
+  }
+  const lastEl = document.getElementById('hero-last');
+  if (lastEl) {
+    lastEl.textContent = state.lastSession
+      ? 'LAST TOUCHED ' + new Date(state.lastSession).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : 'NOT TOUCHED YET';
+  }
 }
 
 // Tick the hero every 60 seconds so the displayed time stays current without a manual refresh.
