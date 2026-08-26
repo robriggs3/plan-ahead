@@ -2,7 +2,17 @@
 
 A single HTML file for personal nomad travel planning. Tracks where you've been, where you are, and where you're going — without sharing your data with anyone.
 
-**[Try it now →](https://robriggs3.github.io/plan-ahead/plan-ahead.html)** · No install. No account. Your data stays in your browser.
+**[Try it now →](https://cityops.robriggs.com/trip.html)** · No install. No account. Your data stays in your browser.
+
+> **The editor moved (2026-08-26).** It is now the trip half of
+> [cityops](https://github.com/robriggs3/cityops), served at
+> [cityops.robriggs.com/trip.html](https://cityops.robriggs.com/trip.html): same app,
+> same origin and same sign-in as the city guides, so one account covers both.
+> `plan-ahead.html` in this repo is a redirect page now, and the source lives at
+> `src/trip-shell.html` in the cityops repo. `robs-travel-itinerary.html` stays
+> here: it is the generated family page served at
+> [wheres.robriggs.com](https://wheres.robriggs.com), and Publish still writes it
+> to this repo.
 
 Video Demo: https://www.loom.com/share/fc9e08bd47334c338b678cb0b9919170
 
@@ -35,10 +45,10 @@ It is a personal planning tool. Built for one specific failure mode: the long-te
 
 ## Install
 
-1. Download `plan-ahead.html`
+1. Download `trip.html` from the [cityops repo](https://github.com/robriggs3/cityops)
 2. Open it in a browser
 3. Bookmark it
-4. Edit the HTML directly to change defaults
+4. Edit `src/trip-shell.html` there to change defaults, then run `node tools/assemble.js`
 
 That's the entire install.
 
@@ -124,7 +134,7 @@ Same [Code Conspirators](https://codeconspirators.com) red as Start Here. Six CS
 
 ## Customizing
 
-Edit `plan-ahead.html` directly. Notable spots:
+Edit `src/trip-shell.html` in the [cityops repo](https://github.com/robriggs3/cityops) and run `node tools/assemble.js`. Notable spots:
 
 - `DEFAULT_PROFILE` — the travel profile shown on first load
 - `CITY_COORDS` — built-in coordinate lookup table; add cities here for instant geocoding
