@@ -9651,6 +9651,13 @@ function buildGuideControlHTML(city) {
     ' onclick="event.stopPropagation()">Plan this city &#8599;</a>';
 }
 
+// Sync metadata FIRST, before anything in this block can call saveState().
+// The backfill below does exactly that, and saveState's hook writes the sync
+// meta key back out: without the stored values loaded, that write would put
+// lastSync:null over a real timestamp and this device would forget when it last
+// reached the account.
+loadSyncMeta();
+
 // A magic-link return arrives as a URL fragment full of tokens. Consume and
 // scrub it FIRST, before any render can put it on screen or the history API can
 // keep it: an access token must never sit in the address bar.
