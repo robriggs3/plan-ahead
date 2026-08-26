@@ -1394,8 +1394,9 @@
      cityops fades what is behind you so the eye lands on what is next.
      Opacity only: every number a faded stop contributes (Schengen, FEIE,
      cost) is still counted, so this must never read as "excluded". */
-  .city.is-past > .city-header { opacity: 0.72; }
-  .city.is-past > .city-header:hover { opacity: 1; }
+  .city.past > .city-header { opacity: 0.72; }
+  .city.past > .city-header:hover { opacity: 1; }
+  .city.past.open > .city-header { opacity: 1; }
 
   /* --- Coarse pointers: 44px on every door in the header --------------- */
   @media (hover: none), (pointer: coarse) {
@@ -3437,6 +3438,7 @@ function renderCityCard(city, hasIssue, hasAlert, isPast) {
         <span class="city-country">${escapeHTML(city.country || '—')}${isSchengen(city.country) ? ' · Schengen' : ''}</span>
         ${statusPill}
         ${scoreBadge}
+        ${buildGuideControlHTML(city)}
       </div>
       <div class="city-dates">${fmtDate(city.checkIn)} → ${fmtDate(city.checkOut)} · ${nights} night${nights===1?'':'s'}${(() => {
         const un = uncoveredNights(city);
@@ -4827,11 +4829,19 @@ function buildFamilyShareForCurrentState() {
       };
     });
 
+  // The share page has no account and must never call Supabase, so which stops
+  // actually have a cityops guide is resolved HERE, at publish time, and baked
+  // in. A stale list only ever costs a "Plan this city" where a guide link could
+  // have been, which is a door that still opens; it can never produce a link
+  // that dead-ends on someone else's city.
+  const guideIds = loadGuideIds() || [];
+
   return buildFamilyShareHTML({
     travelerName: (state.travelerName || '').trim() || 'Your traveler',
     generatedAt: new Date().toISOString(),
     cities: cities,
-    transitions: transitions
+    transitions: transitions,
+    guideIds: guideIds
   });
 }
 
@@ -5010,14 +5020,22 @@ function buildFamilyShareHTML(payload) {
   --shadow-md: 0 2px 8px rgba(0,0,0,.10);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 36px 20px 60px; -webkit-font-smoothing: antialiased; }
-.doc { max-width: 880px; margin: 0 auto; }
-.hero { margin-bottom: 36px; padding: 48px 0 28px; border-bottom: 1px solid var(--border); position: relative; }
-.hero::before { content: 'TRAVEL TRACKER'; position: absolute; top: 0; left: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--accent-strong); letter-spacing: 0.28em; padding: 5px 11px; border: 1px solid var(--accent); border-radius: 2px; }
-.hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: 56px; font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; }
-.hero h1 .em { color: var(--accent); font-style: italic; font-weight: 500; }
-.hero .sub { margin-top: 14px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-3); letter-spacing: 0.16em; text-transform: uppercase; }
-.hero .gen-date { position: absolute; top: 0; right: 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
+body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 0 0 60px; -webkit-font-smoothing: antialiased; }
+.doc { max-width: 880px; margin: 0 auto; padding: 0 20px; }
+/* The cityops header block: square, deep red, edge to edge, with the facts as
+   chips. Same treatment as the editor, so the page family reads and the page Rob
+   edits are visibly one product. The negative margins cancel .doc's padding. */
+.hero { background: linear-gradient(160deg, var(--accent) 0%, var(--accent-hover) 100%); color: #fff;
+  margin: 0 -20px 32px; padding: 26px 20px 22px; position: relative; }
+.hero h1 { font-family: 'Fraunces', Georgia, serif; font-size: 40px; font-weight: 400; line-height: 1.05; letter-spacing: -0.02em; color: #fff; }
+.hero h1 .em { color: #fff; opacity: 0.75; font-style: italic; font-weight: 500; }
+.hero .sub { margin-top: 12px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: rgba(255,255,255,0.88); letter-spacing: 0.14em; text-transform: uppercase; }
+.hero .facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+.hero .chip { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); padding: 5px 11px;
+  border-radius: 20px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #fff; letter-spacing: 0.06em;
+  text-transform: uppercase; text-decoration: none; display: inline-flex; align-items: center; }
+.hero .chip.door:hover { background: rgba(255,255,255,0.3); border-color: rgba(255,255,255,0.6); }
+.hero .gen-date { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.8); letter-spacing: 0.12em; text-transform: uppercase; }
 .current-banner { background: var(--bg-card); border: 1px solid var(--accent); border-radius: 12px; box-shadow: 0 4px 20px rgba(199,32,39,0.10), 0 1px 3px rgba(0,0,0,0.04); margin-bottom: 32px; position: relative; padding: 38px 28px 24px; }
 .you-are-here-badge { position: absolute; top: 0; left: 0; background: var(--accent); color: white; padding: 5px 14px; border-radius: 0 0 8px 0; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; }
 .current-banner h2 { font-family: 'Fraunces', Georgia, serif; font-size: 32px; font-weight: 500; line-height: 1.15; }
@@ -5049,13 +5067,16 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 .pill.booked { background: var(--green-soft); color: var(--green-strong); }
 .pill.shortlisted { background: var(--blue-soft); color: var(--blue); }
 .pill.tentative { background: var(--amber-soft); color: var(--amber-strong); }
-/* City guide cross-link to cityops (same pill vocabulary as .pill, outline instead of fill) */
-.guide-link { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; font-weight: 500; display: inline-block; margin-left: 8px; vertical-align: middle; white-space: nowrap; }
+/* The two-app seam, on the family page. A stop with a cityops guide gets the
+   accent-outlined "City guide" pill; a stop without one gets the dashed, muted
+   "Plan this city", which opens cityops rather than promising a guide that is
+   not there. Which one you see was decided at publish time from the traveller's
+   own guide list, so this page never calls out to an account. */
+.guide-link { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; border: 1.5px solid var(--accent); color: var(--accent-strong); background: #fff; text-decoration: none; font-weight: 500; display: inline-block; margin-left: 8px; vertical-align: middle; white-space: nowrap; }
 .guide-link:hover { background: var(--accent-soft); }
+.guide-link.plan-link { border-style: dashed; border-color: var(--border); color: var(--text-3); }
+.guide-link.plan-link:hover { border-color: var(--accent); color: var(--accent-strong); background: #fff; }
 .current-banner .dates .guide-link { margin-left: 10px; }
-.hero .sub-links { margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
-.hero .sub-links a { color: var(--accent-strong); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
-.hero .sub-links a:hover { border-bottom-color: var(--accent); }
 .map-wrap { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: 8px; }
 #map { height: 420px; z-index: 1; }
 .map-reset-btn { position: absolute; top: 10px; left: 52px; z-index: 1000; background: white; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; padding: 5px 10px; font-size: 11px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.15s; }
@@ -5078,10 +5099,16 @@ body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg); c
 footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-3); letter-spacing: 0.12em; text-transform: uppercase; }
 footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(--text-3); border-radius: 3px; margin-bottom: 10px; }
 @media (max-width: 600px) {
-  body { padding: 20px 14px 40px; }
-  .hero { padding: 48px 0 18px; margin-bottom: 24px; }
-  .hero h1 { font-size: 38px; }
-  .hero .gen-date { position: static; display: block; margin-top: 8px; }
+  body { padding: 0 0 40px; }
+  .doc { padding: 0 14px; }
+  .hero { margin: 0 -14px 24px; padding: 20px 14px 16px; }
+  .hero h1 { font-size: 29px; }
+  .hero .sub { margin-top: 10px; font-size: 10px; letter-spacing: 0.1em; }
+  .hero .facts { gap: 6px; margin-top: 11px; }
+  .hero .chip { padding: 4px 9px; font-size: 10px; }
+  /* A door needs a thumb; a fact does not. */
+  .hero .chip.door { min-height: 44px; padding: 8px 14px; }
+  .guide-link { min-height: 40px; display: inline-flex; align-items: center; margin-left: 0; margin-top: 6px; }
   .current-banner { padding: 34px 16px 18px; margin-bottom: 24px; }
   .current-banner h2 { font-size: 24px; }
   .current-banner h2 .country { display: block; margin: 4px 0 0; }
@@ -5110,10 +5137,12 @@ footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(
 <body>
 <div class="doc">
   <header class="hero">
-    <div class="gen-date" id="gen-date"></div>
     <h1>${escapeHTML(payload.travelerName)} · <span class="em">on the move</span></h1>
     <div class="sub" id="cover-meta">Loading…</div>
-    <div class="sub-links">City guides: <a href="https://cityops.robriggs.com" target="_blank" rel="noopener">cityops.robriggs.com</a></div>
+    <div class="facts">
+      <span class="chip gen-date" id="gen-date"></span>
+      <a class="chip door" href="https://cityops.robriggs.com" target="_blank" rel="noopener noreferrer">City guides &#8599;</a>
+    </div>
   </header>
 
   <div id="current-section"></div>
@@ -5146,21 +5175,68 @@ function escapeHTML(s) {
   return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// cityops cross-link. Slug MUST match cityops's own slug function exactly, or the deep link
-// lands on nothing: lowercase, every non-alphanumeric run becomes one hyphen, trim hyphens.
+// ---- the two-app seam ----
+// plan-ahead owns getting between cities; cityops owns what to do once you are in
+// one. Every stop therefore offers exactly one door, and which one is a FACT
+// baked in at publish time, not a guess made here: DATA.guideIds is the list of
+// guides the traveller actually has. A stop on that list links straight to its
+// guide; a stop that is not gets "Plan this city", which opens cityops. This page
+// never calls an account, so family see the same thing the traveller does.
+//
+// Slug MUST match cityops' own slug() exactly or a deep link lands on nothing:
+// lowercase, every non-alphanumeric run becomes one hyphen, trim hyphens.
 const CITYOPS_BASE = 'https://cityops.robriggs.com';
+const GUIDE_IDS = Array.isArray(DATA.guideIds) ? DATA.guideIds : [];
 
 function citySlug(name) {
   return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }
 
-// Guide pill for one stop. Only rendered when we have both a name and a from-date, and only
-// for the current stop and upcoming stops (past stops get nothing).
-function cityGuideLink(name, fromISO) {
+// Exact match first (same city, same arrival date), then the same city on a
+// nearby date: a check-in that moved by a day does not make the guide wrong.
+function guideIdFor(name, fromISO) {
   const slug = citySlug(name);
-  if (!slug || !fromISO) return '';
-  const href = CITYOPS_BASE + '/#city=' + encodeURIComponent(slug + '-' + fromISO);
-  return '<a class="guide-link" href="' + escapeHTML(href) + '" target="_blank" rel="noopener">City guide ↗</a>';
+  if (!slug || !GUIDE_IDS.length) return '';
+  const exact = fromISO ? (slug + '-' + fromISO) : '';
+  if (exact && GUIDE_IDS.indexOf(exact) !== -1) return exact;
+  const prefix = slug + '-';
+  const siblings = GUIDE_IDS.filter(function (id) { return id.indexOf(prefix) === 0; });
+  if (!siblings.length) return '';
+  if (!fromISO || siblings.length === 1) return siblings[0];
+  const want = Date.parse(fromISO);
+  if (isNaN(want)) return siblings[0];
+  let best = siblings[0], bestGap = Infinity;
+  siblings.forEach(function (id) {
+    const at = Date.parse(id.slice(prefix.length));
+    const gap = isNaN(at) ? Infinity : Math.abs(at - want);
+    if (gap < bestGap) { bestGap = gap; best = id; }
+  });
+  return best;
+}
+
+// cityops has no url-driven prefill today (its hash reader only understands
+// #city=), so this opens the app and carries the stop details in a fragment it
+// safely ignores. That fragment is the scaffold hook if cityops ever wants to
+// prefill its Add-city form from a link.
+function cityPlanLink(city) {
+  const parts = ['plan=' + encodeURIComponent(citySlug(city.name))];
+  if (city.name) parts.push('name=' + encodeURIComponent(city.name));
+  if (city.checkIn) parts.push('from=' + encodeURIComponent(city.checkIn));
+  if (city.checkOut) parts.push('to=' + encodeURIComponent(city.checkOut));
+  if (city.country) parts.push('country=' + encodeURIComponent(city.country));
+  return CITYOPS_BASE + '/#' + parts.join('&');
+}
+
+// One door per stop. Past stops get nothing: the guide is no use once you have left.
+function cityGuideLink(city) {
+  if (!city || !city.name) return '';
+  const id = guideIdFor(city.name, city.checkIn);
+  if (id) {
+    return '<a class="guide-link" href="' + escapeHTML(CITYOPS_BASE + '/#city=' + encodeURIComponent(id)) +
+      '" target="_blank" rel="noopener noreferrer" title="What to eat, see and do here">City guide ↗</a>';
+  }
+  return '<a class="guide-link plan-link" href="' + escapeHTML(cityPlanLink(city)) +
+    '" target="_blank" rel="noopener noreferrer" title="No guide for this stop yet. Opens cityops.">Plan this city ↗</a>';
 }
 
 // Status -> marker color (mirrors itinerary pill colors). Past trumps status (gray). Current trumps everything (red).
@@ -5283,7 +5359,7 @@ function render() {
     const timelineHTML = timeline
       ? '<div class="accom-block"><div class="accom-label">Stay &amp; travel</div>' + timeline + '</div>'
       : '';
-    cs.innerHTML = '<div class="current-banner"><div class="you-are-here-badge">● ' + escapeHTML(TRAVELER) + ' is here</div><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span>' + cityGuideLink(current.name, current.checkIn) + '</div>' + timelineHTML + '</div>';
+    cs.innerHTML = '<div class="current-banner"><div class="you-are-here-badge">● ' + escapeHTML(TRAVELER) + ' is here</div><h2>' + escapeHTML(current.name) + '<span class="country">' + escapeHTML(current.country) + (current.state ? ' · ' + escapeHTML(current.state) : '') + '</span></h2><div class="dates">' + fmtDate(current.checkIn) + ' → ' + fmtDate(current.checkOut) + '<span class="days-left">' + daysLeft + ' day' + (daysLeft===1?'':'s') + ' left</span>' + cityGuideLink(current) + '</div>' + timelineHTML + '</div>';
   } else {
     cs.innerHTML = '<div class="current-banner" style="border-color:var(--border);box-shadow:var(--shadow-sm);padding-top:24px"><div style="text-align:center;color:var(--text-3);font-style:italic;font-family:Fraunces,serif;font-size:18px">Between stays — see upcoming below</div></div>';
   }
@@ -5319,7 +5395,7 @@ function render() {
 function buildLeg(c, isPast) {
   const cls = isPast ? 'leg past' : 'leg';
   const timeline = buildStayTravelTimeline(c, false);
-  return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + (isPast ? '' : cityGuideLink(c.name, c.checkIn)) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div></div>' + (timeline ? '<div class="leg-accom">' + timeline + '</div>' : '') + '</div>';
+  return '<div class="' + cls + '"><div class="leg-head"><div class="leg-title">' + escapeHTML(c.name) + '<span class="country">' + escapeHTML(c.country) + (c.state ? ' · ' + escapeHTML(c.state) : '') + '</span>' + pill(c.status) + (isPast ? '' : cityGuideLink(c)) + '</div><div class="leg-dates">' + fmtDate(c.checkIn) + ' → ' + fmtDate(c.checkOut) + '</div></div>' + (timeline ? '<div class="leg-accom">' + timeline + '</div>' : '') + '</div>';
 }
 
 // Icon mapper for transit modes (must match the admin app's TRANSITION_MODES)
