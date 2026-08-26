@@ -20,6 +20,8 @@ One page for planning long-term travel: where you are now, where you're going, a
 - Interactive map with 130+ pre-loaded city coordinates
 - AI-powered "import from notes" — paste any text, extract destinations
 - Auto-snapshots every 10 minutes, last 5 kept
+- Optional cross-device sync: one magic-link sign-in, shared with the cityops city guides
+- Per-stop links into cityops for what to eat, see and do once you arrive
 - JSON export/import for backups and cross-device transfer
 
 ## What it is not
@@ -27,7 +29,7 @@ One page for planning long-term travel: where you are now, where you're going, a
 - A product
 - A SaaS app
 - A booking tool
-- Synced across devices (single browser, single localStorage)
+- Synced across devices by default (local-first; sync is opt-in, and the app is fully usable without it)
 
 It is a personal planning tool. Built for one specific failure mode: the long-term nomad who needs to track Schengen days, FEIE days, accommodation overlaps, and a dozen potential destinations across an 18-month timeline.
 
@@ -46,8 +48,8 @@ Inspired by the same single-file, no-server, no-account approach as [Start Here]
 
 Three principles drove the design:
 
-1. **No backend, ever.** Your travel plans, addresses, friends, and habits don't go to anyone's server. localStorage in your browser, nowhere else.
-2. **Honest about what's possible without a server.** No cross-device sync. No live scraping of booking sites. No magical AI without your own API key. The compromises are explicit.
+1. **Local first, always.** Your travel plans, addresses, friends, and habits live in localStorage in your browser. Nothing is required to leave it: signed out, the app is complete. Optional sync sends your own data to your own row in your own Supabase project, protected by row level security, so it reaches your other devices and nobody else's.
+2. **Honest about the compromises.** Sync is opt-in and costs you a sign-in. No live scraping of booking sites. No magical AI without your own API key. The compromises are explicit.
 3. **Content elements editable, interface elements not.** Your cities and notes are editable. The "drag to reorder" hint is not. The page should teach itself.
 
 ## How it works
