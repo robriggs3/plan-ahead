@@ -1417,7 +1417,10 @@
     .hero-left .sub { font-size: 13px; }
     .hero-facts { gap: 6px; margin-top: 11px; }
     .hero-chip { padding: 4px 9px; font-size: 11px; }
-    a.hero-chip, button.hero-chip { font-size: 11px; }
+    /* A door gets a thumb at this width whatever the pointer media query
+       reports. Desktop Chrome at 390px claims a fine pointer, and Rob's phone
+       is 390px: the width is the reliable signal here, not the pointer. */
+    a.hero-chip, button.hero-chip { font-size: 11px; min-height: 44px; padding: 8px 13px; }
     .syncalert { padding: 11px 12px; font-size: 12.5px; }
     .guide-link { font-size: 9px; padding: 4px 8px; }
   }
@@ -2648,8 +2651,11 @@ function populateCountries() {
 
 function updateHero() {
   const now = new Date();
+  // Short form: this is a chip in a dense row now, not a right-aligned column.
+  // "Wed, Aug 26, 2026" carries the same information in half the width, which is
+  // what keeps the header to two lines on a 390px phone.
   const dateStr = now.toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric'
   });
   const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   // Timezone abbreviation (EDT, CET, etc.). Fall back to UTC±N offset if not available.
@@ -9428,8 +9434,8 @@ function renderSyncCard() {
     return;
   }
   if (_syncTableMissing) {
-    line.innerHTML = 'Sync is signed in but the server table does not exist yet. Everything is saved on this device ' +
-      'and nothing is lost. Run the one-time setup SQL in the ' +
+    line.innerHTML = 'Sync cannot run yet: the table it needs does not exist on the server. Everything is saved on ' +
+      'this device and nothing is lost. Run the one-time setup SQL in the ' +
       '<a href="https://supabase.com/dashboard/project/ggscdbbvqmqiyguiccrf/sql/new" target="_blank" rel="noopener" ' +
       'style="color:var(--accent)">Supabase SQL editor</a>, then reload this page.';
     host.appendChild(line);
