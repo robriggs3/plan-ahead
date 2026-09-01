@@ -156,7 +156,7 @@ footer .stamp { display: inline-block; padding: 6px 14px; border: 1px solid var(
     <div class="sub" id="cover-meta">Loading…</div>
     <div class="facts">
       <span class="chip gen-date" id="gen-date"></span>
-      <a class="chip door" href="https://cityops.robriggs.com" target="_blank" rel="noopener noreferrer">City guides &#8599;</a>
+      <a class="chip door" href="https://app.nomadding.com" target="_blank" rel="noopener noreferrer">City guides &#8599;</a>
     </div>
   </header>
 
@@ -200,7 +200,7 @@ function escapeHTML(s) {
 //
 // Slug MUST match cityops' own slug() exactly or a deep link lands on nothing:
 // lowercase, every non-alphanumeric run becomes one hyphen, trim hyphens.
-const CITYOPS_BASE = 'https://cityops.robriggs.com';
+const CITYOPS_BASE = 'https://app.nomadding.com';
 const GUIDE_IDS = Array.isArray(DATA.guideIds) ? DATA.guideIds : [];
 
 function citySlug(name) {

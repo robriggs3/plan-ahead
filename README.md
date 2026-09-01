@@ -2,11 +2,11 @@
 
 A single HTML file for personal nomad travel planning. Tracks where you've been, where you are, and where you're going — without sharing your data with anyone.
 
-**[Try it now →](https://cityops.robriggs.com/trip.html)** · No install. No account. Your data stays in your browser.
+**[Try it now →](https://app.nomadding.com/trip/)** · No install. No account. Your data stays in your browser.
 
 > **The editor moved (2026-08-26).** It is now the trip half of
 > [cityops](https://github.com/robriggs3/cityops), served at
-> [cityops.robriggs.com/trip.html](https://cityops.robriggs.com/trip.html): same app,
+> [app.nomadding.com/trip/](https://app.nomadding.com/trip/): same app,
 > same origin and same sign-in as the city guides, so one account covers both.
 > `plan-ahead.html` in this repo is a redirect page now, and the source lives at
 > `src/trip-shell.html` in the cityops repo. `robs-travel-itinerary.html` stays
